@@ -1,243 +1,423 @@
 # Local Business Outreach Tool - Implementation Plan
 
 ## Project Overview
-A web application for finding local businesses, capturing their information, and generating personalized outreach emails using AI.
+A single-page web application for finding local businesses, capturing screenshots, and generating personalized outreach emails using AI. Built to deploy TODAY on Vercel.
 
 ---
 
-## Technology Stack (Recommended)
+## Technology Stack (Based on Your Choices)
 
 ### Frontend
 - **Framework**: Next.js 14+ (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS + shadcn/ui
+- **Language**: JavaScript (no TypeScript)
+- **Styling**: shadcn/ui + Tailwind CSS
 - **UI Components**: Anthropic Claude-inspired design system
 - **State Management**: React hooks + Context API
+- **Architecture**: Single-page with tabs (Search, Results, Settings, History)
 
 ### Backend/APIs
-- **Business Search**: Perplexity Sonar API (your existing prompts)
-- **Email Generation**: Anthropic Claude API (Claude 3.5 Sonnet)
-- **Screenshots**: Screenshotone API or Puppeteer (fallback)
-- **Data Storage**: Browser localStorage (v1), upgrade to Postgres later
+- **Business Search**: Perplexity Sonar API ✓ (API key ready)
+- **Email Generation**: Perplexity Sonar API ✓ (same API)
+- **Screenshots**: Screenshot Machine API ✓ (key: 7d1d96)
+- **Data Storage**: Vercel Blob Storage
+- **Authentication**: Simple password protection ("wecandothis")
 
 ### Deployment
 - **Platform**: Vercel
-- **Environment**: Production + Preview environments
-- **Domain**: Vercel subdomain initially
+- **Domain**: Vercel subdomain
+- **No rate limiting** (as requested)
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       Frontend (Next.js)                     │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐            │
-│  │   Search   │  │  Results   │  │   Emails   │            │
-│  │   Panel    │→ │   Grid     │→ │  Generator │            │
-│  └────────────┘  └────────────┘  └────────────┘            │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│              Single Page App (Next.js)                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │  Search  │  │ Results  │  │ Settings │  │ History  │   │
+│  │   Tab    │  │   Tab    │  │   Tab    │  │   Tab    │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+│       ↓              ↓              ↓              ↓         │
+│  [Search Box]  [Business Cards] [Edit Prompts] [Saved Data] │
+│  [City Input]  [Email Preview]  [API Keys]   [Export CSV]   │
+│  [20-50 Count] [Batch Actions]  [Password]   [A/B Testing]  │
+└──────────────────────────────────────────────────────────────┘
                             ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    API Routes (Next.js)                      │
-│  /api/search-businesses  │  /api/screenshot  │  /api/email  │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    API Routes (Next.js)                       │
+│  /api/search  │  /api/generate-email  │  /api/save-data     │
+└──────────────────────────────────────────────────────────────┘
                             ↓
-┌─────────────────────────────────────────────────────────────┐
-│              External Services                               │
-│  Perplexity API  │  Claude API  │  Screenshot Service       │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│              External Services                                │
+│  Perplexity Sonar API  │  Screenshot Machine  │  Vercel Blob │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Phase 1: Project Setup (Day 1)
+## TODAY'S TIMELINE (6-8 hours total)
+
+### Hour 1-2: Project Setup & Foundation
+### Hour 3-4: Core Features (Search + Screenshots)
+### Hour 5-6: Email Generation & UI Polish
+### Hour 7: Testing & Deployment to Vercel
+### Hour 8: Final tweaks & going live
+
+---
+
+## Phase 1: Project Setup (1-2 hours)
 
 ### Step 1.1: Initialize Next.js Project
 ```bash
 npx create-next-app@latest business-outreach-tool
 # Options:
-# - TypeScript: Yes
+# - TypeScript: NO (JavaScript)
 # - ESLint: Yes
 # - Tailwind CSS: Yes
-# - src/ directory: Yes
+# - src/ directory: No (keep it simple)
 # - App Router: Yes
 # - Import alias: @/*
 ```
 
 ### Step 1.2: Install Core Dependencies
 ```bash
-# UI Components
+cd business-outreach-tool
+
+# UI Components (shadcn/ui)
 npx shadcn-ui@latest init
+# Choose: New York style, Zinc color, CSS variables: yes
+
+# Install shadcn components we'll need
+npx shadcn-ui@latest add button
+npx shadcn-ui@latest add input
+npx shadcn-ui@latest add textarea
+npx shadcn-ui@latest add tabs
+npx shadcn-ui@latest add card
+npx shadcn-ui@latest add toast
+npx shadcn-ui@latest add dialog
 
 # Additional packages
-npm install @anthropic-ai/sdk
 npm install axios
 npm install date-fns
-npm install zustand # State management
-npm install react-hot-toast # Notifications
-npm install lucide-react # Icons
+npm install react-hot-toast
+npm install lucide-react
+npm install @vercel/blob
 ```
 
-### Step 1.3: Project Structure
+### Step 1.3: Project Structure (Simplified for Speed)
 ```
 business-outreach-tool/
-├── src/
-│   ├── app/
-│   │   ├── layout.tsx          # Root layout with Anthropic styling
-│   │   ├── page.tsx            # Main page
-│   │   ├── api/
-│   │   │   ├── search/route.ts         # Business search endpoint
-│   │   │   ├── screenshot/route.ts     # Screenshot capture
-│   │   │   └── generate-email/route.ts # Email generation
-│   │   └── globals.css
-│   ├── components/
-│   │   ├── ui/                 # shadcn components
-│   │   ├── SearchPanel.tsx
-│   │   ├── BusinessCard.tsx
-│   │   ├── EmailPreview.tsx
-│   │   └── ExportButton.tsx
-│   ├── lib/
-│   │   ├── api/
-│   │   │   ├── perplexity.ts
-│   │   │   ├── claude.ts
-│   │   │   └── screenshot.ts
-│   │   ├── types.ts
-│   │   ├── utils.ts
-│   │   └── storage.ts
-│   └── hooks/
-│       ├── useBusinessSearch.ts
-│       └── useEmailGeneration.ts
-├── public/
+├── app/
+│   ├── layout.js            # Root layout with Anthropic styling
+│   ├── page.js              # Main single-page app
+│   ├── globals.css
+│   ├── api/
+│   │   ├── auth/route.js              # Simple password check
+│   │   ├── search/route.js            # Perplexity business search
+│   │   ├── generate-email/route.js    # Perplexity email gen
+│   │   └── data/route.js              # Vercel Blob save/retrieve
+│   └── components/
+│       ├── ui/              # shadcn components
+│       ├── SearchTab.js
+│       ├── ResultsTab.js
+│       ├── SettingsTab.js
+│       ├── HistoryTab.js
+│       ├── BusinessCard.js
+│       ├── EmailPreview.js
+│       └── PasswordGate.js
+├── lib/
+│   ├── api.js               # All API calls
+│   ├── utils.js             # Utility functions
+│   └── prompts.js           # Editable prompts storage
 ├── .env.local
 └── package.json
 ```
 
 ---
 
-## Phase 2: Core Functionality (Days 2-4)
+## Phase 2: Core API Routes & Logic (2-3 hours)
 
-### Step 2.1: Type Definitions
-Create comprehensive TypeScript types:
+### Step 2.1: Environment Variables Setup
 
-```typescript
-// src/lib/types.ts
-export interface Business {
-  id: string;
-  business_type: 'shop' | 'hotel' | 'restaurant';
-  name: string;
-  address: string;
-  phone: string;
-  website: string;
-  email: string;
-  description: string;
-  screenshot_url?: string;
-  generated_email?: GeneratedEmail;
-}
-
-export interface GeneratedEmail {
-  subject_line: string;
-  email_body: string;
-  key_issues: string[];
-  timestamp: string;
-}
-
-export interface SearchParams {
-  city: string;
-  businessTypes: string[];
-  count: number;
-}
+Create `.env.local`:
+```bash
+PERPLEXITY_API_KEY=your_key_here
+SCREENSHOT_API_KEY=7d1d96
+APP_PASSWORD=wecandothis
+BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
 ```
 
-### Step 2.2: API Integration - Perplexity Search
+### Step 2.2: Editable Prompts Configuration
 
-```typescript
-// src/lib/api/perplexity.ts
-export async function searchBusinesses(city: string) {
-  const response = await fetch('https://api.perplexity.ai/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'sonar',
-      messages: [{
-        role: 'user',
-        content: `[Your optimized prompt from n8n]`
-      }]
-    })
-  });
+```javascript
+// lib/prompts.js
+export const DEFAULT_PROMPTS = {
+  businessSearch: `Find {count} small LOCAL shops and small LOCAL hotels in {city}, UK. Focus ONLY on independent, locally-owned businesses - NO chains, NO franchises, NO big brands.
 
-  return await response.json();
+CRITICAL: For each business, you MUST search online to find their ACTUAL, WORKING website URL. Do not guess domain extensions.
+
+Return ONLY a valid JSON object (no markdown, no extra text) with this structure:
+{
+  "businesses": [
+    {
+      "business_type": "shop" or "hotel",
+      "name": "Business Name",
+      "address": "Full street address, postcode, UK",
+      "phone": "+44XXXXXXXXXX",
+      "website": "https://www.example.com",
+      "email": "contact@example.com",
+      "description": "Brief 1-line description"
+    }
+  ]
 }
-```
 
-### Step 2.3: API Integration - Claude Email Generation
+WEBSITE URL REQUIREMENTS:
+1. SEARCH for each business online to find their real website
+2. VERIFY the domain extension (.com, .co.uk, .org, etc.) - don't assume
+3. Check if they have 'www' in their URL or not
+4. If you cannot find a working website after searching, use the business name to search '[business name] official website'
+5. Only return URLs that you have confirmed exist through your search
 
-```typescript
-// src/lib/api/claude.ts
-import Anthropic from '@anthropic-ai/sdk';
+OTHER REQUIREMENTS:
+1. Return ONLY the JSON object - no markdown blocks, no extra text
+2. MUST be small, independent, LOCAL businesses only
+3. NO chains (no Premier Inn, Travelodge, Costa, Starbucks, etc.)
+4. ALL websites MUST start with https:// or http://
+5. Every business MUST have an email (search thoroughly)
+6. Phone numbers MUST include +44 country code
+7. Fill ALL fields - no null or empty values
+8. Return EXACTLY {count} businesses total`,
 
-export async function generateEmail(business: Business, screenshotUrl: string) {
-  const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+  emailGeneration: `You are an expert web design, SEO, and digital marketing consultant analyzing a local business website.
 
-  const message = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 2000,
-    messages: [{
-      role: 'user',
-      content: `[Your email generation prompt with business details]`
-    }],
-  });
+Business Details:
+- Business Name: {name}
+- Type: {business_type}
+- Location: {address}
+- Website: {website}
+- Phone: {phone}
+- Email: {email}
+- Description: {description}
 
-  return JSON.parse(message.content[0].text);
+Website Screenshot: {screenshot_url}
+
+Your Task:
+Analyze this website screenshot and create a HIGHLY PERSONALIZED outreach email that demonstrates deep research. The email should feel like you spent 30+ minutes studying their website, not using a template.
+
+What to Include:
+
+1. OPENING (1-2 sentences):
+   - Reference something SPECIFIC you see on their website (their tagline, a product, their color scheme, a photo, their menu)
+   - Mention their location/neighborhood naturally
+   - Make it feel like a genuine discovery
+
+2. SPECIFIC WEBSITE ISSUES (Pick 3-4 most visible):
+   - Homepage design problems (cluttered layout, poor hero section, unclear value proposition)
+   - Navigation/UX issues (hard to find contact info, no clear CTAs, confusing menu)
+   - Mobile responsiveness problems (if visible in screenshot)
+   - Missing trust elements (no reviews, testimonials, or credentials visible)
+   - Outdated design elements (old fonts, dated images, 2010s style)
+   - SEO red flags (slow loading indicators, missing key information)
+   - Missing conversion elements (no booking button, unclear next steps)
+
+3. LOCAL SEO & COMPETITION ANGLE:
+   - Mention how local customers search for {business_type}s in {address}
+   - Reference that competitors in their area have better online presence
+   - Explain how improving their site will help them appear in "near me" searches
+
+4. BUSINESS IMPACT (For each issue, explain):
+   - "This means potential customers are leaving your site within seconds"
+   - "You're losing bookings/sales to competitors with better websites"
+   - "Local customers searching on mobile can't easily contact you"
+
+5. URGENCY (Pick one angle):
+   - Seasonal opportunity (holiday season, summer bookings, etc.)
+   - Local competition is getting ahead
+   - Google's recent algorithm changes favor modern, fast websites
+   - Mobile-first indexing means their mobile site matters more than ever
+
+6. SOFT CALL-TO-ACTION:
+   - Offer a free, no-obligation website audit report
+   - Or a quick 15-minute consultation call
+   - Make it feel helpful, not salesy
+
+OUTPUT FORMAT:
+Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
+
+{
+  "email_body": "Your complete email text here (3-4 paragraphs, specific observations, natural tone)",
+  "key_issues": ["Issue 1", "Issue 2", "Issue 3"],
+  "subject_line": "Personalized subject line mentioning their business name"
 }
-```
 
-### Step 2.4: Screenshot Capture
-
-```typescript
-// src/lib/api/screenshot.ts
-export async function captureScreenshot(url: string): Promise<string> {
-  // Option 1: Screenshotone API
-  const apiUrl = `https://api.screenshotone.com/take?access_key=${process.env.SCREENSHOT_API_KEY}&url=${encodeURIComponent(url)}&viewport_width=1920&viewport_height=1080&format=jpg`;
-
-  return apiUrl;
-
-  // Option 2: Self-hosted Puppeteer (add later if needed)
-}
-```
-
-### Step 2.5: Local Storage Management
-
-```typescript
-// src/lib/storage.ts
-const STORAGE_KEY = 'business_outreach_data';
-
-export const storage = {
-  saveBusinesses: (businesses: Business[]) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(businesses));
-  },
-
-  loadBusinesses: (): Business[] => {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  },
-
-  exportToCSV: (businesses: Business[]) => {
-    // CSV generation logic
-  },
-
-  exportToJSON: (businesses: Business[]) => {
-    const blob = new Blob([JSON.stringify(businesses, null, 2)], {
-      type: 'application/json'
-    });
-    return URL.createObjectURL(blob);
-  }
+CRITICAL RULES:
+1. Be ULTRA-SPECIFIC - reference actual visible elements from their website
+2. Use their business name, type, and location naturally throughout
+3. Sound like you manually researched their site, not using AI
+4. Professional but warm and friendly tone (like a local consultant)
+5. NO generic templates - every sentence should be unique to this business
+6. Make them feel like you genuinely want to help, not just sell
+7. Keep email body to 200-250 words maximum
+8. Return ONLY the JSON object, nothing else`
 };
+
+// Helper to replace placeholders
+export function fillPrompt(template, variables) {
+  let result = template;
+  for (const [key, value] of Object.entries(variables)) {
+    result = result.replace(new RegExp(`{${key}}`, 'g'), value);
+  }
+  return result;
+}
+```
+
+### Step 2.3: API Route - Business Search
+
+```javascript
+// app/api/search/route.js
+import { NextResponse } from 'next/server';
+import { DEFAULT_PROMPTS, fillPrompt } from '@/lib/prompts';
+
+export async function POST(request) {
+  try {
+    const { city, count, customPrompt } = await request.json();
+
+    // Use custom prompt if provided, otherwise use default
+    const promptTemplate = customPrompt || DEFAULT_PROMPTS.businessSearch;
+    const prompt = fillPrompt(promptTemplate, { city, count });
+
+    // Call Perplexity Sonar API
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [{
+          role: 'user',
+          content: prompt
+        }]
+      })
+    });
+
+    const data = await response.json();
+    let businesses = [];
+
+    try {
+      // Parse JSON from Perplexity response
+      const content = data.choices[0].message.content;
+      businesses = JSON.parse(content).businesses;
+
+      // Add screenshots to each business
+      businesses = businesses.map(business => ({
+        ...business,
+        id: crypto.randomUUID(),
+        screenshot_url: `https://api.screenshotmachine.com/?key=${process.env.SCREENSHOT_API_KEY}&url=${encodeURIComponent(business.website)}&dimension=1024x768`,
+        timestamp: new Date().toISOString()
+      }));
+
+    } catch (parseError) {
+      console.error('Failed to parse Perplexity response:', parseError);
+      return NextResponse.json({ error: 'Failed to parse business data' }, { status: 500 });
+    }
+
+    return NextResponse.json({ businesses });
+
+  } catch (error) {
+    console.error('Search error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+```
+
+### Step 2.4: API Route - Email Generation
+
+```javascript
+// app/api/generate-email/route.js
+import { NextResponse } from 'next/server';
+import { DEFAULT_PROMPTS, fillPrompt } from '@/lib/prompts';
+
+export async function POST(request) {
+  try {
+    const { business, customPrompt } = await request.json();
+
+    const promptTemplate = customPrompt || DEFAULT_PROMPTS.emailGeneration;
+    const prompt = fillPrompt(promptTemplate, business);
+
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [{
+          role: 'user',
+          content: prompt
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const content = data.choices[0].message.content;
+    const email = JSON.parse(content);
+
+    return NextResponse.json({ email });
+
+  } catch (error) {
+    console.error('Email generation error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+```
+
+### Step 2.5: API Route - Data Persistence (Vercel Blob)
+
+```javascript
+// app/api/data/route.js
+import { NextResponse } from 'next/server';
+import { put, list, del } from '@vercel/blob';
+
+// Save search results
+export async function POST(request) {
+  try {
+    const { businesses, searchId } = await request.json();
+
+    const blob = await put(`searches/${searchId}.json`, JSON.stringify(businesses), {
+      access: 'public',
+    });
+
+    return NextResponse.json({ url: blob.url });
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// Get search history
+export async function GET() {
+  try {
+    const { blobs } = await list({ prefix: 'searches/' });
+    return NextResponse.json({ history: blobs });
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// Delete search
+export async function DELETE(request) {
+  try {
+    const { url } = await request.json();
+    await del(url);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
 ```
 
 ---
