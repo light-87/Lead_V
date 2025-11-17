@@ -63,9 +63,18 @@ export async function DELETE(req) {
       return NextResponse.json({ error: 'businessId is required' }, { status: 400 });
     }
 
-    await del(`leads/${businessId}.json`);
+    // List all blobs with the leads prefix to find the one to delete
+    const { blobs } = await list({ prefix: 'leads/' });
 
-    return NextResponse.json({ success: true, message: 'Lead deleted' });
+    // Find the blob that matches our businessId
+    const blobToDelete = blobs.find(blob => blob.pathname === `leads/${businessId}.json`);
+
+    if (blobToDelete) {
+      await del(blobToDelete.url);
+      return NextResponse.json({ success: true, message: 'Lead deleted' });
+    } else {
+      return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+    }
   } catch (error) {
     console.error('Lead delete error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
