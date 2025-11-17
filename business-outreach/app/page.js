@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Search, Mail, Settings, History, Target, Edit, Save, X, Globe, Plus } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Loader2, Search, Mail, Settings, History, Target, Edit, Save, X, Globe, Plus, CheckSquare, Send } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { DEFAULT_PROMPTS, fillPrompt } from '@/lib/prompts';
 
@@ -36,6 +37,10 @@ export default function Home() {
   const [history, setHistory] = useState([]);
   const [leads, setLeads] = useState([]);
   const [selectedCity, setSelectedCity] = useState('');
+  const [selectedBusinessIds, setSelectedBusinessIds] = useState([]);
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [generatedEmails, setGeneratedEmails] = useState([]);
+  const [searchedCities, setSearchedCities] = useState([]);
 
   // Load settings on mount
   useEffect(() => {
@@ -45,6 +50,12 @@ export default function Home() {
       loadLeads();
     }
   }, [authenticated]);
+
+  // Extract unique searched cities from history
+  useEffect(() => {
+    const cities = [...new Set(history.map(h => h.city))].filter(Boolean);
+    setSearchedCities(cities);
+  }, [history]);
 
   // City autocomplete
   const handleCityChange = (value) => {
@@ -116,6 +127,23 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Failed to load leads:', error);
+    }
+  };
+
+  // Load previous search results for a city
+  const loadCityResults = async (cityName) => {
+    try {
+      const res = await fetch(`/api/data?city=${cityName}`);
+      const data = await res.json();
+      if (res.ok && data.history.length > 0) {
+        // Get all businesses from all searches for this city
+        const allBusinesses = data.history.flatMap(h => h.businesses || []);
+        setBusinesses(allBusinesses);
+        setCity(cityName);
+        toast.success(`Loaded ${allBusinesses.length} businesses from ${cityName}`);
+      }
+    } catch (error) {
+      toast.error('Failed to load city results');
     }
   };
 
@@ -349,6 +377,82 @@ export default function Home() {
     toast.success('CSV exported!');
   };
 
+  // Toggle business selection
+  const toggleBusinessSelection = (businessId) => {
+    setSelectedBusinessIds(prev =>
+      prev.includes(businessId)
+        ? prev.filter(id => id !== businessId)
+        : [...prev, businessId]
+    );
+  };
+
+  // Select all businesses
+  const selectAllBusinesses = () => {
+    if (selectedBusinessIds.length === businesses.length) {
+      setSelectedBusinessIds([]);
+    } else {
+      setSelectedBusinessIds(businesses.map(b => b.id));
+    }
+  };
+
+  // Generate emails for selected businesses
+  const generateBulkEmails = async () => {
+    if (selectedBusinessIds.length === 0) {
+      toast.error('Please select at least one business');
+      return;
+    }
+
+    setBulkGenerating(true);
+    const emails = [];
+    const selectedBusinesses = businesses.filter(b => selectedBusinessIds.includes(b.id));
+
+    const loadingToast = toast.loading(`Generating emails for ${selectedBusinesses.length} businesses...`);
+
+    for (let i = 0; i < selectedBusinesses.length; i++) {
+      const business = selectedBusinesses[i];
+      try {
+        const currentSettings = settings || { emailStyles: DEFAULT_PROMPTS.emailStyles };
+        const stylePrompt = currentSettings.emailStyles[emailStyle]?.prompt || DEFAULT_PROMPTS.emailStyles.professional.prompt;
+
+        const notes = businessNotes[business.id] || '';
+        const additionalNotes = notes ? `\nADDITIONAL NOTES ABOUT THIS BUSINESS:\n${notes}` : '';
+
+        const edits = businessEdits[business.id] || {};
+        const businessData = {
+          ...business,
+          ...edits,
+          additionalNotes
+        };
+
+        const res = await fetch('/api/generate-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            business: businessData,
+            customPrompt: stylePrompt
+          })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          emails.push({
+            business,
+            email: data.email
+          });
+          toast.loading(`Generated ${i + 1}/${selectedBusinesses.length}...`, { id: loadingToast });
+        }
+      } catch (error) {
+        console.error(`Failed to generate email for ${business.name}:`, error);
+      }
+    }
+
+    setGeneratedEmails(emails);
+    setBulkGenerating(false);
+    toast.dismiss(loadingToast);
+    toast.success(`Generated ${emails.length} emails!`);
+    setSelectedBusinessIds([]);
+  };
+
   return (
     <div className="min-h-screen p-6">
       <Toaster position="top-center" />
@@ -369,66 +473,92 @@ export default function Home() {
 
         {/* SEARCH TAB */}
         <TabsContent value="search">
-          <Card className="p-6 max-w-2xl">
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium">City (UK)</label>
-                  <div className="flex items-center gap-2 text-xs text-claude-gray">
-                    <Globe className="w-3 h-3" />
-                    <span>More countries coming soon</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Search Form */}
+            <Card className="p-6">
+              <h3 className="text-lg font-serif mb-4">New Search</h3>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium">City (UK)</label>
+                    <div className="flex items-center gap-2 text-xs text-claude-gray">
+                      <Globe className="w-3 h-3" />
+                      <span>More countries coming soon</span>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      value={city}
+                      onChange={(e) => handleCityChange(e.target.value)}
+                      placeholder="e.g., London, Manchester, Birmingham"
+                      autoComplete="off"
+                    />
+                    {citySuggestions.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-claude-border rounded-lg shadow-lg">
+                        {citySuggestions.map((suggestion, idx) => (
+                          <div
+                            key={idx}
+                            className="px-4 py-2 hover:bg-claude-cream cursor-pointer"
+                            onClick={() => {
+                              setCity(suggestion);
+                              setCitySuggestions([]);
+                            }}
+                          >
+                            {suggestion}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="relative">
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Number of Businesses (20-50)</label>
                   <Input
-                    value={city}
-                    onChange={(e) => handleCityChange(e.target.value)}
-                    placeholder="e.g., London, Manchester, Birmingham"
-                    autoComplete="off"
+                    type="number"
+                    min="20"
+                    max="50"
+                    value={count}
+                    onChange={(e) => setCount(parseInt(e.target.value))}
                   />
-                  {citySuggestions.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-claude-border rounded-lg shadow-lg">
-                      {citySuggestions.map((suggestion, idx) => (
-                        <div
-                          key={idx}
-                          className="px-4 py-2 hover:bg-claude-cream cursor-pointer"
-                          onClick={() => {
-                            setCity(suggestion);
-                            setCitySuggestions([]);
-                          }}
-                        >
-                          {suggestion}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">Number of Businesses (20-50)</label>
-                <Input
-                  type="number"
-                  min="20"
-                  max="50"
-                  value={count}
-                  onChange={(e) => setCount(parseInt(e.target.value))}
-                />
+                <Button
+                  onClick={() => searchBusinesses([])}
+                  disabled={loading || !city}
+                  className="w-full bg-claude-orange hover:bg-claude-orange-dark"
+                >
+                  {loading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Searching...</>
+                  ) : (
+                    <><Search className="w-4 h-4 mr-2" />Search Businesses</>
+                  )}
+                </Button>
               </div>
+            </Card>
 
-              <Button
-                onClick={() => searchBusinesses([])}
-                disabled={loading || !city}
-                className="w-full bg-claude-orange hover:bg-claude-orange-dark"
-              >
-                {loading ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Searching...</>
-                ) : (
-                  <><Search className="w-4 h-4 mr-2" />Search Businesses</>
-                )}
-              </Button>
-            </div>
-          </Card>
+            {/* Previously Searched Cities */}
+            <Card className="p-6">
+              <h3 className="text-lg font-serif mb-4">Previously Searched Cities</h3>
+              {searchedCities.length === 0 ? (
+                <p className="text-sm text-claude-gray text-center py-8">No previous searches yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {searchedCities.map((cityName, idx) => (
+                    <Button
+                      key={idx}
+                      variant="outline"
+                      className="w-full justify-start text-left hover:bg-claude-cream"
+                      onClick={() => loadCityResults(cityName)}
+                    >
+                      <History className="w-4 h-4 mr-2" />
+                      {cityName}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
         </TabsContent>
 
         {/* RESULTS TAB */}
@@ -450,10 +580,44 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Bulk Operations */}
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      onClick={selectAllBusinesses}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <CheckSquare className="w-4 h-4 mr-2" />
+                      {selectedBusinessIds.length === businesses.length ? 'Deselect All' : 'Select All'}
+                    </Button>
+                    {selectedBusinessIds.length > 0 && (
+                      <span className="text-sm text-claude-gray">
+                        {selectedBusinessIds.length} selected
+                      </span>
+                    )}
+                  </div>
+                  {selectedBusinessIds.length > 0 && (
+                    <Button
+                      onClick={generateBulkEmails}
+                      disabled={bulkGenerating}
+                      className="bg-claude-orange hover:bg-claude-orange-dark"
+                    >
+                      {bulkGenerating ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</>
+                      ) : (
+                        <><Mail className="w-4 h-4 mr-2" />Generate Emails ({selectedBusinessIds.length})</>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </Card>
+
               {/* Email Style Selector */}
               <Card className="p-4">
                 <label className="block text-sm font-medium mb-2">Email Style</label>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
                   {Object.entries(DEFAULT_PROMPTS.emailStyles).map(([key, style]) => (
                     <Button
                       key={key}
@@ -473,15 +637,25 @@ export default function Home() {
                   const edits = businessEdits[business.id] || {};
                   const displayBusiness = { ...business, ...edits };
                   const notes = businessNotes[business.id];
+                  const isSelected = selectedBusinessIds.includes(business.id);
 
                   return (
-                    <Card key={business.id} className="overflow-hidden hover:shadow-lg transition">
-                      <img
-                        src={business.screenshot_url}
-                        alt={business.name}
-                        className="w-full h-48 object-cover"
-                        onError={(e) => e.target.src = 'https://via.placeholder.com/400x300?text=No+Screenshot'}
-                      />
+                    <Card key={business.id} className={`overflow-hidden hover:shadow-lg transition ${isSelected ? 'ring-2 ring-claude-orange' : ''}`}>
+                      <div className="relative">
+                        <img
+                          src={business.screenshot_url}
+                          alt={business.name}
+                          className="w-full h-48 object-cover"
+                          onError={(e) => e.target.src = 'https://via.placeholder.com/400x300?text=No+Screenshot'}
+                        />
+                        <div className="absolute top-2 left-2">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleBusinessSelection(business.id)}
+                            className="bg-white border-2"
+                          />
+                        </div>
+                      </div>
                       <div className="p-4">
                         <div className="flex justify-between items-start mb-2">
                           <h3 className="font-serif text-lg font-semibold">{displayBusiness.name}</h3>
@@ -598,6 +772,71 @@ export default function Home() {
                   </div>
                 </Card>
               )}
+
+              {/* Bulk Generated Emails */}
+              {generatedEmails.length > 0 && (
+                <Card className="p-6 mt-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-serif">Generated Emails ({generatedEmails.length})</h3>
+                    <Button
+                      onClick={() => setGeneratedEmails([])}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+
+                  <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                    {generatedEmails.map(({ business, email }, idx) => (
+                      <Card key={idx} className="p-4 border-2">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="font-serif font-semibold">{business.name}</h4>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                navigator.clipboard.writeText(`Subject: ${email.subject_line}\n\n${email.email_body}`);
+                                toast.success(`Email for ${business.name} copied!`);
+                              }}
+                            >
+                              Copy
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => markEmailSent(business, email)}
+                              className="bg-claude-orange hover:bg-claude-orange-dark"
+                            >
+                              Mark Sent
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div>
+                            <span className="text-xs font-medium text-claude-gray">Subject:</span>
+                            <p className="text-sm">{email.subject_line}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-claude-gray">Body:</span>
+                            <p className="text-sm whitespace-pre-wrap">{email.email_body}</p>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded">
+                    <p className="text-sm text-blue-800 mb-2">
+                      <strong>Ready to send?</strong> Smart Leads AI integration coming soon for bulk email sending.
+                    </p>
+                    <Button disabled variant="outline" size="sm">
+                      <Send className="w-4 h-4 mr-2" />
+                      Send All via Smart Leads AI (Coming Soon)
+                    </Button>
+                  </div>
+                </Card>
+              )}
             </div>
           )}
         </TabsContent>
@@ -682,6 +921,8 @@ function EditBusinessForm({ business, edits, notes, onSave, onCancel }) {
 
 // Lead Tracker Tab Component
 function LeadTrackerTab({ leads, onUpdateLead, emailStyles }) {
+  const [followUpModal, setFollowUpModal] = useState(null);
+
   if (leads.length === 0) {
     return (
       <Card className="p-12 text-center">
@@ -691,9 +932,24 @@ function LeadTrackerTab({ leads, onUpdateLead, emailStyles }) {
     );
   }
 
+  // Group leads by businessId to avoid duplicates
+  const uniqueLeads = leads.reduce((acc, lead) => {
+    const existing = acc.find(l => l.businessId === lead.businessId);
+    if (!existing) {
+      acc.push(lead);
+    } else {
+      // Keep the most recent version
+      if (new Date(lead.updatedAt || lead.sentAt) > new Date(existing.updatedAt || existing.sentAt)) {
+        const index = acc.indexOf(existing);
+        acc[index] = lead;
+      }
+    }
+    return acc;
+  }, []);
+
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-serif">Lead Tracker ({leads.length} leads)</h2>
+      <h2 className="text-2xl font-serif">Lead Tracker ({uniqueLeads.length} leads)</h2>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
@@ -708,11 +964,13 @@ function LeadTrackerTab({ leads, onUpdateLead, emailStyles }) {
             </tr>
           </thead>
           <tbody>
-            {leads.map((lead, idx) => {
+            {uniqueLeads.map((lead, idx) => {
               const daysSince = Math.floor((Date.now() - new Date(lead.sentAt).getTime()) / (1000 * 60 * 60 * 24));
+              const respondedDate = lead.respondedAt ? new Date(lead.respondedAt).toLocaleDateString() : null;
+              const meetingDate = lead.meetingScheduledAt ? new Date(lead.meetingScheduledAt).toLocaleDateString() : null;
 
               return (
-                <tr key={idx} className="border-b border-claude-border hover:bg-claude-cream">
+                <tr key={lead.businessId || idx} className="border-b border-claude-border hover:bg-claude-cream">
                   <td className="p-3">{lead.businessName}</td>
                   <td className="p-3">{lead.city}</td>
                   <td className="p-3"><span className="text-xs bg-blue-100 px-2 py-1 rounded">{lead.emailStyle}</span></td>
@@ -720,18 +978,26 @@ function LeadTrackerTab({ leads, onUpdateLead, emailStyles }) {
                   <td className="p-3">{daysSince}d</td>
                   <td className="p-3">
                     <div className="flex flex-col gap-1 text-xs">
-                      {lead.responded && <span className="text-green-600">✓ Responded</span>}
-                      {lead.meetingScheduled && <span className="text-blue-600">✓ Meeting</span>}
+                      {lead.responded && (
+                        <span className="text-green-600">✓ Responded {respondedDate && `(${respondedDate})`}</span>
+                      )}
+                      {lead.meetingScheduled && (
+                        <span className="text-blue-600">✓ Meeting {meetingDate && `(${meetingDate})`}</span>
+                      )}
                       {!lead.responded && !lead.meetingScheduled && <span className="text-gray-400">Pending</span>}
                     </div>
                   </td>
                   <td className="p-3">
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
                       {!lead.responded && (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => onUpdateLead({ ...lead, responded: true })}
+                          onClick={() => onUpdateLead({
+                            ...lead,
+                            responded: true,
+                            respondedAt: new Date().toISOString()
+                          })}
                         >
                           Got Response
                         </Button>
@@ -740,11 +1006,24 @@ function LeadTrackerTab({ leads, onUpdateLead, emailStyles }) {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => onUpdateLead({ ...lead, meetingScheduled: true })}
+                          onClick={() => onUpdateLead({
+                            ...lead,
+                            meetingScheduled: true,
+                            meetingScheduledAt: new Date().toISOString()
+                          })}
                         >
                           Meeting
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setFollowUpModal(lead)}
+                        className="bg-yellow-50 hover:bg-yellow-100"
+                      >
+                        <Mail className="w-3 h-3 mr-1" />
+                        Follow-up
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -753,14 +1032,57 @@ function LeadTrackerTab({ leads, onUpdateLead, emailStyles }) {
           </tbody>
         </table>
       </div>
+
+      {/* Follow-up Email Modal */}
+      {followUpModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <Card className="p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-serif">Send Follow-up Email</h3>
+              <Button variant="ghost" onClick={() => setFollowUpModal(null)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-claude-gray">
+                Send a follow-up email to <strong>{followUpModal.businessName}</strong>
+              </p>
+              <div>
+                <label className="block text-sm font-medium mb-2">Select Email Style</label>
+                <div className="space-y-2">
+                  {Object.entries(emailStyles).map(([key, style]) => (
+                    <Button
+                      key={key}
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        toast.success(`Follow-up email feature: Generate ${style.name} style email for ${followUpModal.businessName}`);
+                        // TODO: Implement actual follow-up email generation
+                        // This would trigger email generation with the selected style
+                        setFollowUpModal(null);
+                      }}
+                    >
+                      {style.name}
+                      <span className="ml-auto text-xs text-claude-gray">{style.description}</span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-xs text-claude-gray">
+                Note: This will generate a new email based on the selected style. The follow-up will be tracked in the lead history.
+              </p>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
 
 // History Tab Component
 function HistoryTab({ history, onCityFilter, selectedCity }) {
+  const [expandedSearch, setExpandedSearch] = useState(null);
   const cities = [...new Set(history.map(h => h.city))].filter(Boolean);
-  const allBusinesses = history.flatMap(h => h.businesses || []);
 
   return (
     <div className="space-y-4">
@@ -795,25 +1117,44 @@ function HistoryTab({ history, onCityFilter, selectedCity }) {
         </Card>
       ) : (
         <div className="space-y-4">
-          {history.map((search, idx) => (
-            <Card key={idx} className="p-4">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h3 className="font-serif text-lg">{search.city}</h3>
-                  <p className="text-sm text-claude-gray">
-                    {new Date(search.timestamp).toLocaleString()} • {search.businesses?.length || 0} businesses
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                {(search.businesses || []).slice(0, 8).map((b, i) => (
-                  <div key={i} className="text-xs p-2 bg-claude-cream rounded">
-                    {b.name}
+          {history.map((search, idx) => {
+            const isExpanded = expandedSearch === idx;
+            const businesses = search.businesses || [];
+            const displayBusinesses = isExpanded ? businesses : businesses.slice(0, 8);
+
+            return (
+              <Card key={idx} className="p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h3 className="font-serif text-lg">{search.city}</h3>
+                    <p className="text-sm text-claude-gray">
+                      {new Date(search.timestamp).toLocaleString()} • {businesses.length} businesses
+                    </p>
                   </div>
-                ))}
-              </div>
-            </Card>
-          ))}
+                  {businesses.length > 8 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setExpandedSearch(isExpanded ? null : idx)}
+                    >
+                      {isExpanded ? 'Show Less' : `Show All ${businesses.length}`}
+                    </Button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                  {displayBusinesses.map((b, i) => (
+                    <div
+                      key={i}
+                      className="text-xs p-2 bg-claude-cream rounded hover:bg-claude-orange hover:text-white cursor-pointer transition"
+                      title={`${b.name} - ${b.address}`}
+                    >
+                      {b.name}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
@@ -824,10 +1165,69 @@ function HistoryTab({ history, onCityFilter, selectedCity }) {
 function SettingsTab({ settings, onSaveSettings }) {
   const [editedSettings, setEditedSettings] = useState(settings);
   const [editingPrompt, setEditingPrompt] = useState(null);
+  const [editingSearchPrompt, setEditingSearchPrompt] = useState(false);
+
+  // Initialize search prompt if not exists
+  if (!editedSettings.searchPrompt) {
+    editedSettings.searchPrompt = DEFAULT_PROMPTS.businessSearch;
+  }
 
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-serif">Settings</h2>
+
+      {/* Search Prompt */}
+      <Card className="p-6">
+        <h3 className="text-lg font-serif mb-4">Business Search Prompt</h3>
+        <p className="text-sm text-claude-gray mb-4">Customize the prompt used to search for businesses</p>
+
+        <div className="border border-claude-border rounded-lg p-4">
+          <div className="flex justify-between items-center mb-2">
+            <div>
+              <h4 className="font-medium">Search Prompt Template</h4>
+              <p className="text-xs text-claude-gray">Used when searching for new businesses in a city</p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setEditingSearchPrompt(!editingSearchPrompt)}
+            >
+              <Edit className="w-3 h-3 mr-2" />
+              {editingSearchPrompt ? 'Cancel' : 'Edit Prompt'}
+            </Button>
+          </div>
+          {editingSearchPrompt && (
+            <div className="mt-4">
+              <Textarea
+                value={editedSettings.searchPrompt}
+                onChange={(e) => {
+                  setEditedSettings({
+                    ...editedSettings,
+                    searchPrompt: e.target.value
+                  });
+                }}
+                rows={15}
+                className="font-mono text-xs mb-2"
+              />
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setEditingSearchPrompt(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-claude-orange hover:bg-claude-orange-dark"
+                  onClick={() => {
+                    onSaveSettings(editedSettings);
+                    setEditingSearchPrompt(false);
+                  }}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* Email Styles */}
       <Card className="p-6">
@@ -845,9 +1245,10 @@ function SettingsTab({ settings, onSaveSettings }) {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setEditingPrompt(key)}
+                  onClick={() => setEditingPrompt(editingPrompt === key ? null : key)}
                 >
-                  <Edit className="w-3 h-3 mr-2" />Edit Prompt
+                  <Edit className="w-3 h-3 mr-2" />
+                  {editingPrompt === key ? 'Cancel' : 'Edit Prompt'}
                 </Button>
               </div>
               {editingPrompt === key && (
@@ -863,7 +1264,7 @@ function SettingsTab({ settings, onSaveSettings }) {
                         }
                       });
                     }}
-                    rows={10}
+                    rows={15}
                     className="font-mono text-xs mb-2"
                   />
                   <div className="flex gap-2">
