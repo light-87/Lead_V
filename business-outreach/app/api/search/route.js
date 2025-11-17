@@ -3,13 +3,17 @@ import { DEFAULT_PROMPTS, fillPrompt } from '@/lib/prompts';
 
 export async function POST(req) {
   try {
-    const { city, count } = await req.json();
+    const { city, count, excludeBusinesses = '' } = await req.json();
 
     if (!city || !count) {
       return NextResponse.json({ error: 'City and count are required' }, { status: 400 });
     }
 
-    const prompt = fillPrompt(DEFAULT_PROMPTS.businessSearch, { city, count });
+    const prompt = fillPrompt(DEFAULT_PROMPTS.businessSearch, {
+      city,
+      count,
+      excludeBusinesses: excludeBusinesses || ''
+    });
 
     const res = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
