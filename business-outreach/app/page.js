@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Search, Mail, Settings, History, Target, Edit, Save, X, Globe, Plus, CheckSquare, Send } from 'lucide-react';
+import { Loader2, Search, Mail, Settings, History, Target, Edit, Save, X, Globe, Plus, CheckSquare, Send, Trash2 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { DEFAULT_PROMPTS, fillPrompt } from '@/lib/prompts';
 
@@ -989,7 +989,10 @@ function LeadTrackerTab({ leads, onUpdateLead, onDeleteLead, emailStyles }) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-serif">Lead Tracker ({uniqueLeads.length} leads)</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-serif">Lead Tracker</h2>
+        <span className="text-sm text-claude-gray">{uniqueLeads.length} {uniqueLeads.length === 1 ? 'lead' : 'leads'} tracked</span>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
@@ -1028,53 +1031,56 @@ function LeadTrackerTab({ leads, onUpdateLead, onDeleteLead, emailStyles }) {
                     </div>
                   </td>
                   <td className="p-3">
-                    <div className="flex flex-wrap gap-1">
-                      {!lead.responded && (
+                    <div className="flex flex-wrap gap-2">
+                      <div className="flex gap-1">
+                        {!lead.responded && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onUpdateLead({
+                              ...lead,
+                              responded: true,
+                              respondedAt: new Date().toISOString()
+                            })}
+                          >
+                            Got Response
+                          </Button>
+                        )}
+                        {!lead.meetingScheduled && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onUpdateLead({
+                              ...lead,
+                              meetingScheduled: true,
+                              meetingScheduledAt: new Date().toISOString()
+                            })}
+                          >
+                            Meeting
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => onUpdateLead({
-                            ...lead,
-                            responded: true,
-                            respondedAt: new Date().toISOString()
-                          })}
+                          onClick={() => setFollowUpModal(lead)}
+                          className="bg-yellow-50 hover:bg-yellow-100"
                         >
-                          Got Response
+                          <Mail className="w-3 h-3 mr-1" />
+                          Follow-up
                         </Button>
-                      )}
-                      {!lead.meetingScheduled && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onUpdateLead({
-                            ...lead,
-                            meetingScheduled: true,
-                            meetingScheduledAt: new Date().toISOString()
-                          })}
-                        >
-                          Meeting
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setFollowUpModal(lead)}
-                        className="bg-yellow-50 hover:bg-yellow-100"
-                      >
-                        <Mail className="w-3 h-3 mr-1" />
-                        Follow-up
-                      </Button>
+                      </div>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          if (window.confirm(`Delete lead for ${lead.businessName}?`)) {
+                          if (window.confirm(`Are you sure you want to delete the lead for ${lead.businessName}? This will remove the entire row.`)) {
                             onDeleteLead(lead.businessId);
                           }
                         }}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        className="bg-red-50 text-red-600 hover:text-red-700 hover:bg-red-100 border-red-200"
                       >
-                        <X className="w-3 h-3" />
+                        <Trash2 className="w-3 h-3 mr-1" />
+                        Delete
                       </Button>
                     </div>
                   </td>
