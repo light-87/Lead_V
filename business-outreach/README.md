@@ -200,10 +200,7 @@ Update the `APP_PASSWORD` in `.env.local`
 - Check Next.js version compatibility
 - Clear `.next` folder and rebuild
 
-## License
+## Creator
 
-MIT
+Vaibhav 🤗
 
-## Support
-
-For issues or questions, please open an issue on GitHub.
