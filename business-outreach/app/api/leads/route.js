@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { put, list } from '@vercel/blob';
+import { put, list, del } from '@vercel/blob';
 
 // Save or update lead tracking data
 export async function POST(req) {
@@ -49,6 +49,25 @@ export async function GET() {
     return NextResponse.json({ leads: validLeads });
   } catch (error) {
     console.error('Leads fetch error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// Delete lead by businessId
+export async function DELETE(req) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const businessId = searchParams.get('businessId');
+
+    if (!businessId) {
+      return NextResponse.json({ error: 'businessId is required' }, { status: 400 });
+    }
+
+    await del(`leads/${businessId}.json`);
+
+    return NextResponse.json({ success: true, message: 'Lead deleted' });
+  } catch (error) {
+    console.error('Lead delete error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
