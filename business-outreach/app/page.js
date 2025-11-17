@@ -130,6 +130,42 @@ export default function Home() {
     }
   };
 
+  // Delete search history
+  const deleteSearchHistory = async (searchId) => {
+    try {
+      const res = await fetch(`/api/data?searchId=${searchId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        toast.success('Search history deleted');
+        loadHistory(selectedCity); // Reload history
+      } else {
+        toast.error('Failed to delete search history');
+      }
+    } catch (error) {
+      console.error('Failed to delete search history:', error);
+      toast.error('Failed to delete search history');
+    }
+  };
+
+  // Delete lead
+  const deleteLead = async (businessId) => {
+    try {
+      const res = await fetch(`/api/leads?businessId=${businessId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        toast.success('Lead deleted');
+        loadLeads(); // Reload leads
+      } else {
+        toast.error('Failed to delete lead');
+      }
+    } catch (error) {
+      console.error('Failed to delete lead:', error);
+      toast.error('Failed to delete lead');
+    }
+  };
+
   // Load previous search results for a city
   const loadCityResults = async (cityName) => {
     try {
@@ -846,6 +882,7 @@ export default function Home() {
           <LeadTrackerTab
             leads={leads}
             onUpdateLead={updateLead}
+            onDeleteLead={deleteLead}
             emailStyles={DEFAULT_PROMPTS.emailStyles}
           />
         </TabsContent>
@@ -859,6 +896,7 @@ export default function Home() {
               loadHistory(city);
             }}
             selectedCity={selectedCity}
+            onDeleteHistory={deleteSearchHistory}
           />
         </TabsContent>
 
@@ -920,8 +958,10 @@ function EditBusinessForm({ business, edits, notes, onSave, onCancel }) {
 }
 
 // Lead Tracker Tab Component
-function LeadTrackerTab({ leads, onUpdateLead, emailStyles }) {
+function LeadTrackerTab({ leads, onUpdateLead, onDeleteLead, emailStyles }) {
   const [followUpModal, setFollowUpModal] = useState(null);
+  const [followUpEmail, setFollowUpEmail] = useState(null);
+  const [generatingFollowUp, setGeneratingFollowUp] = useState(false);
 
   if (leads.length === 0) {
     return (
@@ -1024,6 +1064,18 @@ function LeadTrackerTab({ leads, onUpdateLead, emailStyles }) {
                         <Mail className="w-3 h-3 mr-1" />
                         Follow-up
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (window.confirm(`Delete lead for ${lead.businessName}?`)) {
+                            onDeleteLead(lead.businessId);
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -1035,42 +1087,137 @@ function LeadTrackerTab({ leads, onUpdateLead, emailStyles }) {
 
       {/* Follow-up Email Modal */}
       {followUpModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <Card className="p-6 max-w-md w-full">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <Card className="p-6 max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-serif">Send Follow-up Email</h3>
-              <Button variant="ghost" onClick={() => setFollowUpModal(null)}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setFollowUpModal(null);
+                  setFollowUpEmail(null);
+                }}
+              >
                 <X className="w-4 h-4" />
               </Button>
             </div>
+
             <div className="space-y-4">
               <p className="text-sm text-claude-gray">
                 Send a follow-up email to <strong>{followUpModal.businessName}</strong>
               </p>
-              <div>
-                <label className="block text-sm font-medium mb-2">Select Email Style</label>
-                <div className="space-y-2">
-                  {Object.entries(emailStyles).map(([key, style]) => (
+
+              {!followUpEmail ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-3">Select Email Style</label>
+                    <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
+                      {Object.entries(emailStyles).map(([key, style]) => (
+                        <Button
+                          key={key}
+                          variant="outline"
+                          className="w-full text-left h-auto py-3 px-4 flex flex-col items-start hover:bg-blue-50"
+                          disabled={generatingFollowUp}
+                          onClick={async () => {
+                            setGeneratingFollowUp(true);
+                            try {
+                              // Generate follow-up email using the same email generation API
+                              const prompt = fillPrompt(style.prompt, {
+                                name: followUpModal.businessName,
+                                business_type: followUpModal.businessType || 'business',
+                                address: followUpModal.city,
+                                website: followUpModal.website || 'N/A',
+                                phone: followUpModal.phone || 'N/A',
+                                email: followUpModal.email || 'N/A',
+                                description: followUpModal.description || '',
+                                screenshot_url: followUpModal.screenshot || '',
+                                additionalNotes: `This is a follow-up email. Previous email was sent on ${new Date(followUpModal.sentAt).toLocaleDateString()} using ${followUpModal.emailStyle} style.`
+                              });
+
+                              const res = await fetch('/api/generate-email', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ prompt })
+                              });
+
+                              const data = await res.json();
+                              if (res.ok && data.email) {
+                                setFollowUpEmail({
+                                  ...data.email,
+                                  style: style.name
+                                });
+                                toast.success('Follow-up email generated!');
+                              } else {
+                                toast.error('Failed to generate follow-up email');
+                              }
+                            } catch (error) {
+                              console.error('Follow-up generation error:', error);
+                              toast.error('Error generating follow-up email');
+                            } finally {
+                              setGeneratingFollowUp(false);
+                            }
+                          }}
+                        >
+                          <span className="font-medium text-base">{style.name}</span>
+                          <span className="text-xs text-claude-gray mt-1">{style.description}</span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {generatingFollowUp && (
+                    <div className="text-center py-4">
+                      <Loader2 className="w-6 h-6 animate-spin mx-auto text-claude-orange" />
+                      <p className="text-sm text-claude-gray mt-2">Generating follow-up email...</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="mb-3">
+                      <label className="text-xs font-medium text-claude-gray">Email Style</label>
+                      <p className="text-sm font-medium">{followUpEmail.style}</p>
+                    </div>
+                    <div className="mb-3">
+                      <label className="text-xs font-medium text-claude-gray">Subject</label>
+                      <p className="text-sm">{followUpEmail.subject_line}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-claude-gray">Email Body</label>
+                      <div className="text-sm whitespace-pre-wrap mt-1 max-h-64 overflow-y-auto bg-white p-3 rounded">
+                        {followUpEmail.email_body}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
                     <Button
-                      key={key}
                       variant="outline"
-                      className="w-full justify-start"
-                      onClick={() => {
-                        toast.success(`Follow-up email feature: Generate ${style.name} style email for ${followUpModal.businessName}`);
-                        // TODO: Implement actual follow-up email generation
-                        // This would trigger email generation with the selected style
-                        setFollowUpModal(null);
-                      }}
+                      onClick={() => setFollowUpEmail(null)}
+                      className="flex-1"
                     >
-                      {style.name}
-                      <span className="ml-auto text-xs text-claude-gray">{style.description}</span>
+                      Change Style
                     </Button>
-                  ))}
-                </div>
-              </div>
-              <p className="text-xs text-claude-gray">
-                Note: This will generate a new email based on the selected style. The follow-up will be tracked in the lead history.
-              </p>
+                    <Button
+                      onClick={() => {
+                        // TODO: Implement actual email sending API
+                        toast.success(`Follow-up email will be sent to ${followUpModal.businessName} (API coming soon)`);
+                        setFollowUpModal(null);
+                        setFollowUpEmail(null);
+                      }}
+                      className="flex-1 bg-claude-orange hover:bg-claude-orange-dark"
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Send Email
+                    </Button>
+                  </div>
+
+                  <p className="text-xs text-claude-gray">
+                    Note: The follow-up will be tracked in the lead history once the email sending API is implemented.
+                  </p>
+                </>
+              )}
             </div>
           </Card>
         </div>
@@ -1080,7 +1227,7 @@ function LeadTrackerTab({ leads, onUpdateLead, emailStyles }) {
 }
 
 // History Tab Component
-function HistoryTab({ history, onCityFilter, selectedCity }) {
+function HistoryTab({ history, onCityFilter, selectedCity, onDeleteHistory }) {
   const [expandedSearch, setExpandedSearch] = useState(null);
   const cities = [...new Set(history.map(h => h.city))].filter(Boolean);
 
@@ -1131,15 +1278,29 @@ function HistoryTab({ history, onCityFilter, selectedCity }) {
                       {new Date(search.timestamp).toLocaleString()} • {businesses.length} businesses
                     </p>
                   </div>
-                  {businesses.length > 8 && (
+                  <div className="flex gap-2">
+                    {businesses.length > 8 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setExpandedSearch(isExpanded ? null : idx)}
+                      >
+                        {isExpanded ? 'Show Less' : `Show All ${businesses.length}`}
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setExpandedSearch(isExpanded ? null : idx)}
+                      onClick={() => {
+                        if (window.confirm(`Delete this search from ${search.city}?`)) {
+                          onDeleteHistory(search.searchId);
+                        }
+                      }}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
                     >
-                      {isExpanded ? 'Show Less' : `Show All ${businesses.length}`}
+                      <X className="w-4 h-4" />
                     </Button>
-                  )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                   {displayBusinesses.map((b, i) => (

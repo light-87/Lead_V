@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { put, list, head } from '@vercel/blob';
+import { put, list, head, del } from '@vercel/blob';
 
 // Save search results with city metadata
 export async function POST(req) {
@@ -60,6 +60,25 @@ export async function GET(req) {
     return NextResponse.json({ history: filtered });
   } catch (error) {
     console.error('Data fetch error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// Delete search history by searchId
+export async function DELETE(req) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const searchId = searchParams.get('searchId');
+
+    if (!searchId) {
+      return NextResponse.json({ error: 'searchId is required' }, { status: 400 });
+    }
+
+    await del(`searches/${searchId}.json`);
+
+    return NextResponse.json({ success: true, message: 'Search history deleted' });
+  } catch (error) {
+    console.error('Data delete error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

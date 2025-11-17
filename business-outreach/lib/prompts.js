@@ -240,6 +240,36 @@ Return ONLY JSON:
   "subject_line": "Value-focused subject line emphasizing benefit"
 }`
     },
+    weibo: {
+      name: 'Weibo',
+      description: 'Concise, social media-style approach with modern tone',
+      prompt: `You are a modern digital marketing consultant creating a concise, social media-savvy outreach email.
+
+Business Details:
+- Business Name: {name}
+- Type: {business_type}
+- Location: {address}
+- Website: {website}
+- Screenshot: {screenshot_url}
+{additionalNotes}
+
+Create a short, punchy email with a modern, social media-influenced tone. Think Weibo/Twitter style - concise, engaging, and to the point.
+
+Structure:
+1. Quick, attention-grabbing opening (reference something specific from their site)
+2. 2-3 key issues in short, impactful sentences
+3. Focus on mobile-first and social media presence
+4. Modern call-to-action (DM, quick chat, video call)
+
+Keep it ultra-short: 120-150 words max. Use short paragraphs (1-2 sentences each). Modern, energetic tone.
+
+Return ONLY JSON:
+{
+  "email_body": "Concise, modern email text",
+  "key_issues": ["Issue 1", "Issue 2", "Issue 3"],
+  "subject_line": "Punchy, modern subject line"
+}`
+    },
     vaibhav: {
       name: 'Vaibhav',
       description: 'Ultra-detailed analysis with comprehensive website audit',
