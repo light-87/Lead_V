@@ -39,6 +39,7 @@ export default function Home() {
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedBusinessIds, setSelectedBusinessIds] = useState([]);
   const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkSending, setBulkSending] = useState(false);
   const [generatedEmails, setGeneratedEmails] = useState([]);
   const [searchedCities, setSearchedCities] = useState([]);
 
@@ -564,6 +565,93 @@ export default function Home() {
     setSelectedBusinessIds([]);
   };
 
+  // Send all generated emails via Smartlead
+  const sendBulkEmails = async () => {
+    if (generatedEmails.length === 0) {
+      toast.error('No emails to send');
+      return;
+    }
+
+    // Check if Smartlead is configured
+    const campaignId = settings?.smartlead?.campaignId || '2690291';
+    if (!campaignId) {
+      toast.error('Campaign ID not configured. Please add it in Settings.');
+      return;
+    }
+
+    setBulkSending(true);
+    let successCount = 0;
+    let failureCount = 0;
+
+    const loadingToast = toast.loading(`Sending ${generatedEmails.length} emails via Smartlead...`);
+
+    for (let i = 0; i < generatedEmails.length; i++) {
+      const { business, email } = generatedEmails[i];
+
+      try {
+        if (!business.email) {
+          console.warn(`Skipping ${business.name} - no email address`);
+          failureCount++;
+          continue;
+        }
+
+        // Prepare lead data
+        const leadData = {
+          first_name: business.name?.split(' ')[0] || 'There',
+          last_name: business.name?.split(' ').slice(1).join(' ') || '',
+          name: business.name,
+          email: business.email,
+          company_name: business.name,
+          website: business.website || '',
+          location: business.address || '',
+          address: business.address || '',
+          phone: business.phone || '',
+          business_type: business.business_type || '',
+          id: business.id
+        };
+
+        // Send to Smartlead
+        const res = await fetch('/api/smartlead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'send',
+            campaignId: campaignId,
+            lead: leadData,
+            email: email
+          })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          successCount++;
+          // Mark as sent in Lead Tracker
+          await markEmailSent(business, email);
+          toast.loading(`Sent ${successCount}/${generatedEmails.length}...`, { id: loadingToast });
+        } else {
+          failureCount++;
+          console.error(`Failed to send to ${business.name}:`, data.error);
+        }
+      } catch (error) {
+        failureCount++;
+        console.error(`Error sending to ${business.name}:`, error);
+      }
+    }
+
+    setBulkSending(false);
+    toast.dismiss(loadingToast);
+
+    if (successCount > 0 && failureCount === 0) {
+      toast.success(`Successfully sent all ${successCount} emails via Smartlead!`);
+      setGeneratedEmails([]); // Clear sent emails
+    } else if (successCount > 0) {
+      toast.success(`Sent ${successCount} emails. ${failureCount} failed.`);
+    } else {
+      toast.error(`Failed to send emails. Please check console for details.`);
+    }
+  };
+
   return (
     <div className="min-h-screen p-6">
       <Toaster position="top-center" />
@@ -954,13 +1042,21 @@ export default function Home() {
                     ))}
                   </div>
 
-                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded">
-                    <p className="text-sm text-blue-800 mb-2">
-                      <strong>Ready to send?</strong> Smart Leads AI integration coming soon for bulk email sending.
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded">
+                    <p className="text-sm text-green-800 mb-2">
+                      <strong>Ready to send?</strong> Send all {generatedEmails.length} emails via Smartlead.
                     </p>
-                    <Button disabled variant="outline" size="sm">
-                      <Send className="w-4 h-4 mr-2" />
-                      Send All via Smart Leads AI (Coming Soon)
+                    <Button
+                      onClick={sendBulkEmails}
+                      disabled={bulkSending}
+                      className="bg-green-600 hover:bg-green-700"
+                      size="sm"
+                    >
+                      {bulkSending ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>
+                      ) : (
+                        <><Send className="w-4 h-4 mr-2" />Send All via Smartlead ({generatedEmails.length})</>
+                      )}
                     </Button>
                   </div>
                 </Card>
