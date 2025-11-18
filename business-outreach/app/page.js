@@ -414,7 +414,18 @@ export default function Home() {
         // Also mark as sent in Lead Tracker
         await markEmailSent(business, emailData);
       } else {
-        toast.error(data.error || 'Failed to send via Smartlead');
+        // Show detailed error message for 403 errors
+        if (res.status === 403) {
+          toast.error(data.message || data.error, {
+            duration: 8000,
+            icon: '⚠️',
+          });
+          if (data.solution) {
+            console.log('Solution:', data.solution);
+          }
+        } else {
+          toast.error(data.error || 'Failed to send via Smartlead');
+        }
         console.error('Smartlead error:', data);
       }
     } catch (error) {
@@ -1446,7 +1457,29 @@ function SettingsTab({ settings, onSaveSettings }) {
           console.log('Available campaigns:', data.campaigns);
         }
       } else {
-        toast.error(data.error || 'Failed to connect to Smartlead');
+        // Show detailed error message for 403 errors
+        if (res.status === 403) {
+          toast.error(data.message || data.error, {
+            duration: 8000,
+            icon: '⚠️',
+          });
+          if (data.solution) {
+            console.log('Solution:', data.solution);
+            setTimeout(() => {
+              toast(data.solution, {
+                duration: 10000,
+                icon: '💡',
+                style: {
+                  background: '#fff3cd',
+                  color: '#856404',
+                  border: '1px solid #ffeaa7',
+                }
+              });
+            }, 500);
+          }
+        } else {
+          toast.error(data.error || 'Failed to connect to Smartlead');
+        }
         console.error('Connection error:', data);
       }
     } catch (error) {
@@ -1518,6 +1551,29 @@ function SettingsTab({ settings, onSaveSettings }) {
       <Card className="p-6">
         <h3 className="text-lg font-serif mb-4">Smartlead Integration</h3>
         <p className="text-sm text-claude-gray mb-4">Configure Smartlead for automated email sending</p>
+
+        {/* Plan Requirements Banner */}
+        <div className="mb-4 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-blue-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h4 className="text-sm font-medium text-blue-800">PRO Plan Required</h4>
+              <div className="mt-2 text-sm text-blue-700">
+                <p className="mb-2">Smartlead API access requires a PRO plan subscription.</p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>Go to Smartlead → Settings → Activate API</li>
+                  <li>If "Activate API" is not available, upgrade to PRO plan</li>
+                  <li>Your API key will be provided after activation</li>
+                  <li>Add the API key to your .env.local file as SMARTLEAD_API_KEY</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div className="space-y-4">
           <div>
