@@ -579,18 +579,9 @@ export default function Home() {
         // If using nosite styles, distribute across all three parts
         let currentStyle = emailStyle;
         if (emailStyle === 'nosite' || emailStyle === 'nosite_part2' || emailStyle === 'nosite_part3') {
-          // Check if business qualifies for nosite_part3 (£299+ category)
-          const premiumTypes = ['restaurant', 'hotel', 'salon', 'spa', 'dental', 'medical', 'law', 'accountant'];
-          const businessTypeStr = (business.business_type || '').toLowerCase();
-          const isPremiumType = premiumTypes.some(t => businessTypeStr.includes(t));
-          const isAffluentArea = business.address?.match(/SW1|SW3|SW7|W1|W8|NW3|NW8|EC1|EC2|EC3|EC4/i);
-          const qualifiesForPart3 = isPremiumType || isAffluentArea;
-
-          // Distribute emails across the three styles
-          const nositeStyles = qualifiesForPart3
-            ? ['nosite', 'nosite_part2', 'nosite_part3']
-            : ['nosite', 'nosite_part2']; // Don't use part3 for non-premium businesses
-
+          // Distribute emails evenly across all three nosite styles
+          // All businesses now get a chance at the free preview offer (part 3)
+          const nositeStyles = ['nosite', 'nosite_part2', 'nosite_part3'];
           const styleIndex = i % nositeStyles.length;
           currentStyle = nositeStyles[styleIndex];
         }
