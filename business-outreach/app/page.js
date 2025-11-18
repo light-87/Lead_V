@@ -358,6 +358,73 @@ export default function Home() {
     }
   };
 
+  // Send email via Smartlead
+  const sendViaSmartlead = async (business, emailData) => {
+    try {
+      // Check if Smartlead is configured
+      if (!settings?.smartlead?.enabled) {
+        toast.error('Smartlead is not enabled. Please enable it in Settings.');
+        return;
+      }
+
+      if (!settings?.smartlead?.campaignId) {
+        toast.error('Campaign ID not configured. Please add it in Settings.');
+        return;
+      }
+
+      if (!business.email) {
+        toast.error('Business email is missing. Cannot send via Smartlead.');
+        return;
+      }
+
+      setLoading(true);
+
+      // Prepare lead data
+      const leadData = {
+        first_name: business.name?.split(' ')[0] || 'There',
+        last_name: business.name?.split(' ').slice(1).join(' ') || '',
+        name: business.name,
+        email: business.email,
+        company_name: business.name,
+        website: business.website || '',
+        location: business.address || '',
+        address: business.address || '',
+        phone: business.phone || '',
+        business_type: business.business_type || '',
+        id: business.id
+      };
+
+      // Send to Smartlead
+      const res = await fetch('/api/smartlead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send',
+          campaignId: settings.smartlead.campaignId,
+          lead: leadData,
+          email: emailData
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success(`Email sent to ${business.email} via Smartlead!`);
+
+        // Also mark as sent in Lead Tracker
+        await markEmailSent(business, emailData);
+      } else {
+        toast.error(data.error || 'Failed to send via Smartlead');
+        console.error('Smartlead error:', data);
+      }
+    } catch (error) {
+      toast.error('Failed to send via Smartlead');
+      console.error('Smartlead send error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Update lead status
   const updateLead = async (leadData) => {
     try {
@@ -798,6 +865,16 @@ export default function Home() {
                       >
                         Copy Email
                       </Button>
+                      {settings?.smartlead?.enabled && (
+                        <Button
+                          onClick={() => sendViaSmartlead(selectedBusiness, email)}
+                          disabled={loading}
+                          className="flex-1 bg-green-600 hover:bg-green-700"
+                        >
+                          <Send className="w-4 h-4 mr-2" />
+                          {loading ? 'Sending...' : 'Send via Smartlead'}
+                        </Button>
+                      )}
                       <Button
                         onClick={() => markEmailSent(selectedBusiness, email)}
                         className="flex-1 bg-claude-orange hover:bg-claude-orange-dark"
@@ -839,6 +916,17 @@ export default function Home() {
                             >
                               Copy
                             </Button>
+                            {settings?.smartlead?.enabled && (
+                              <Button
+                                size="sm"
+                                onClick={() => sendViaSmartlead(business, email)}
+                                disabled={loading}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <Send className="w-4 h-4 mr-1" />
+                                Send
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               onClick={() => markEmailSent(business, email)}
@@ -1333,11 +1421,41 @@ function SettingsTab({ settings, onSaveSettings }) {
   const [editedSettings, setEditedSettings] = useState(settings);
   const [editingPrompt, setEditingPrompt] = useState(null);
   const [editingSearchPrompt, setEditingSearchPrompt] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
 
   // Initialize search prompt if not exists
   if (!editedSettings.searchPrompt) {
     editedSettings.searchPrompt = DEFAULT_PROMPTS.businessSearch;
   }
+
+  // Test Smartlead connection
+  const testSmartleadConnection = async () => {
+    setTestingConnection(true);
+    try {
+      const res = await fetch('/api/smartlead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test' })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success('Successfully connected to Smartlead API!');
+        if (data.campaigns) {
+          console.log('Available campaigns:', data.campaigns);
+        }
+      } else {
+        toast.error(data.error || 'Failed to connect to Smartlead');
+        console.error('Connection error:', data);
+      }
+    } catch (error) {
+      toast.error('Network error testing Smartlead connection');
+      console.error('Test error:', error);
+    } finally {
+      setTestingConnection(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -1393,6 +1511,79 @@ function SettingsTab({ settings, onSaveSettings }) {
               </div>
             </div>
           )}
+        </div>
+      </Card>
+
+      {/* Smartlead Integration */}
+      <Card className="p-6">
+        <h3 className="text-lg font-serif mb-4">Smartlead Integration</h3>
+        <p className="text-sm text-claude-gray mb-4">Configure Smartlead for automated email sending</p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Campaign ID</label>
+            <input
+              type="text"
+              value={editedSettings.smartlead?.campaignId || ''}
+              onChange={(e) => {
+                setEditedSettings({
+                  ...editedSettings,
+                  smartlead: {
+                    ...editedSettings.smartlead,
+                    campaignId: e.target.value
+                  }
+                });
+              }}
+              placeholder="Enter your Smartlead Campaign ID"
+              className="w-full px-3 py-2 border border-claude-border rounded-md"
+            />
+            <p className="text-xs text-claude-gray mt-1">Get this from your Smartlead campaign dashboard</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={editedSettings.smartlead?.enabled || false}
+              onChange={(e) => {
+                setEditedSettings({
+                  ...editedSettings,
+                  smartlead: {
+                    ...editedSettings.smartlead,
+                    enabled: e.target.checked
+                  }
+                });
+              }}
+              className="rounded border-claude-border"
+            />
+            <label className="text-sm">Enable Smartlead integration</label>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={testSmartleadConnection}
+              disabled={testingConnection}
+            >
+              {testingConnection ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Testing...
+                </>
+              ) : (
+                'Test Connection'
+              )}
+            </Button>
+            <Button
+              size="sm"
+              className="bg-claude-orange hover:bg-claude-orange-dark"
+              onClick={() => {
+                onSaveSettings(editedSettings);
+              }}
+            >
+              Save Smartlead Settings
+            </Button>
+          </div>
         </div>
       </Card>
 
