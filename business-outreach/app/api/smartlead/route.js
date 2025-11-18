@@ -100,6 +100,8 @@ export async function POST(request) {
             custom_fields: {
               business_type: lead.business_type || '',
               address: lead.address || '',
+              ...(email?.subject_line && { email_subject: email.subject_line }),
+              ...(email?.email_body && { email_body: email.email_body }),
               ...(email?.key_issues && { key_issues: email.key_issues.join(', ') }),
             },
           },
