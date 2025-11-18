@@ -48,15 +48,15 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Failed to parse business data' }, { status: 500 });
     }
 
-    // Add screenshots and metadata to each business
-    const withScreenshots = businesses.map(b => ({
+    // Add metadata to each business (no screenshots needed since they don't have websites)
+    const withMetadata = businesses.map(b => ({
       ...b,
       id: crypto.randomUUID(),
-      screenshot_url: `https://api.screenshotmachine.com/?key=${process.env.SCREENSHOT_API_KEY}&url=${encodeURIComponent(b.website)}&dimension=1024x768`,
+      website: null, // These businesses don't have websites
       timestamp: new Date().toISOString()
     }));
 
-    return NextResponse.json({ businesses: withScreenshots });
+    return NextResponse.json({ businesses: withMetadata });
 
   } catch (error) {
     console.error('Search error:', error);

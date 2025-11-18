@@ -840,13 +840,12 @@ export default function Home() {
 
                   return (
                     <Card key={business.id} className={`overflow-hidden hover:shadow-lg transition ${isSelected ? 'ring-2 ring-claude-orange' : ''}`}>
-                      <div className="relative">
-                        <img
-                          src={business.screenshot_url}
-                          alt={business.name}
-                          className="w-full h-48 object-cover"
-                          onError={(e) => e.target.src = 'https://via.placeholder.com/400x300?text=No+Screenshot'}
-                        />
+                      <div className="relative bg-gradient-to-br from-claude-orange to-claude-orange-dark h-48 flex items-center justify-center">
+                        <div className="text-center text-white">
+                          <Globe className="w-16 h-16 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm font-medium">No Website</p>
+                          <p className="text-xs opacity-75">Perfect opportunity!</p>
+                        </div>
                         <div className="absolute top-2 left-2">
                           <Checkbox
                             checked={isSelected}
@@ -875,13 +874,8 @@ export default function Home() {
                         <div className="text-xs space-y-1 text-claude-gray mb-4">
                           <p>📍 {displayBusiness.address}</p>
                           <p>📞 {displayBusiness.phone}</p>
-                          <p>
-                            🌐{' '}
-                            <a href={displayBusiness.website} target="_blank" rel="noopener noreferrer" className="text-claude-orange hover:underline">
-                              {displayBusiness.website}
-                            </a>
-                          </p>
-                          <p>✉️ {displayBusiness.email}</p>
+                          <p>🌐 No website (great opportunity!)</p>
+                          {displayBusiness.email && <p>✉️ {displayBusiness.email}</p>}
                         </div>
                         <Button
                           onClick={() => generateEmail(displayBusiness)}
@@ -1103,7 +1097,6 @@ export default function Home() {
 // Edit Business Form Component
 function EditBusinessForm({ business, edits, notes, onSave, onCancel }) {
   const [phone, setPhone] = useState(edits.phone || business.phone || '');
-  const [website, setWebsite] = useState(edits.website || business.website || '');
   const [email, setEmail] = useState(edits.email || business.email || '');
   const [businessNotes, setBusinessNotes] = useState(notes || '');
 
@@ -1112,10 +1105,6 @@ function EditBusinessForm({ business, edits, notes, onSave, onCancel }) {
       <div>
         <label className="block text-sm font-medium mb-2">Phone</label>
         <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-2">Website</label>
-        <Input value={website} onChange={(e) => setWebsite(e.target.value)} />
       </div>
       <div>
         <label className="block text-sm font-medium mb-2">Email</label>
@@ -1135,7 +1124,7 @@ function EditBusinessForm({ business, edits, notes, onSave, onCancel }) {
       <div className="flex gap-2">
         <Button onClick={onCancel} variant="outline" className="flex-1">Cancel</Button>
         <Button
-          onClick={() => onSave({ phone, website, email }, businessNotes)}
+          onClick={() => onSave({ phone, email }, businessNotes)}
           className="flex-1 bg-claude-orange hover:bg-claude-orange-dark"
         >
           <Save className="w-4 h-4 mr-2" />Save Changes

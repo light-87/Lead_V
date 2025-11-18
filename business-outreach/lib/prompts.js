@@ -1,58 +1,88 @@
 export const DEFAULT_PROMPTS = {
-  businessSearch: `Find {count} small LOCAL shops and small LOCAL hotels in {city}, UK. Focus ONLY on independent, locally-owned businesses - NO chains, NO franchises, NO big brands.
+  businessSearch: `Find {count} small LOCAL businesses in {city}, UK. Focus ONLY on independent, locally-owned businesses - NO chains, NO franchises, NO big brands.
 
 {excludeBusinesses}
 
-CRITICAL: For each business, you MUST search online to find their ACTUAL, WORKING website URL.
+CRITICAL REQUIREMENT: Find businesses that DO NOT have a website. These should be businesses that only have:
+- Google My Business listing
+- Facebook page only
+- Just a phone number in directories
+- No web presence at all
+
+Search online for each business and confirm they DO NOT have a proper website. If they have a website, SKIP them and find another business.
 
 Return ONLY a valid JSON object (no markdown, no extra text):
 {
   "businesses": [
     {
-      "business_type": "shop" or "hotel",
+      "business_type": "restaurant/cafe/shop/salon/plumber/electrician/other service",
       "name": "Business Name",
       "address": "Full address with postcode, UK",
       "phone": "+44XXXXXXXXXX",
-      "website": "https://www.example.com",
-      "email": "contact@example.com",
-      "description": "Brief 1-line description"
+      "email": "contact@example.com or empty string if not found",
+      "description": "Brief 1-line description of what they do"
     }
   ]
 }
 
 REQUIREMENTS:
 - Return ONLY the JSON object
-- ALL websites MUST start with https:// or http://
+- Each business MUST NOT have a website
 - Phone numbers MUST include +44 country code
 - Return EXACTLY {count} businesses total
-- NO chains or franchises`,
+- NO chains or franchises
+- Include various business types (restaurants, cafes, shops, salons, plumbers, electricians, etc.)`,
 
-  emailGeneration: `You are an expert web design consultant analyzing a local business website.
+  emailGeneration: `You are a friendly local business helper writing a simple, genuine email to a local business without a website.
 
-Business: {name}
-Type: {business_type}
-Location: {address}
-Website: {website}
-Screenshot: {screenshot_url}
-{additionalNotes}
+Business Details:
+- Business Name: {name}
+- Type: {business_type}
+- Location: {address}
+- Phone: {phone}
+- Description: {description}
+- Suggested Price: £{price}
 
-Create a HIGHLY PERSONALIZED outreach email:
+Create a DIRECT, SIMPLE, and GENUINE email with this exact structure:
 
-1. OPENING: Reference something SPECIFIC from their website
-2. ISSUES: Identify 3-4 visible website problems
-3. LOCAL SEO: Explain how improvements help them rank in local searches
-4. BUSINESS IMPACT: Show how issues lose them customers
-5. URGENCY: Add a timely reason to act now
-6. SOFT CTA: Offer free audit or 15-min call
+1. OPENING: Start with "I was trying to find your website and couldn't find it."
+
+2. BODY (Keep it simple and genuine):
+   - Mention their business name, what they do, and where they are
+   - Explain simply how having a website helps local customers find them
+   - Mention that people search online for [their business type] in [their area]
+   - Use very simple language - NO technical jargon
+   - Sound genuinely helpful, not salesy
+   - Keep it conversational and warm
+
+3. OFFER:
+   - Mention you can help them get a professional website
+   - Include the price: £{price} (use this exact price provided)
+   - Make it sound like a good deal without being pushy
+
+4. CLOSING (IMPORTANT - Use this EXACT signature, do not modify):
+Would you prefer a 2-minute video walkthrough or a quick call?
+Best Regards,
+Krishna Sonecha
+Director of A2K AI Limited
++44 7504 201946
 
 Return ONLY valid JSON:
 {
-  "email_body": "3-4 paragraphs, ultra-specific, 200-250 words",
-  "key_issues": ["Issue 1", "Issue 2", "Issue 3"],
-  "subject_line": "Personalized subject with their name"
+  "email_body": "Complete email with the hardcoded signature at the end. Keep total length 150-200 words. Be direct, simple, and genuine.",
+  "key_issues": ["No website", "Missing online presence", "Hard for customers to find online"],
+  "subject_line": "Quick question about {name}"
 }
 
-Be ULTRA-SPECIFIC. Sound human, not AI. Return ONLY JSON.`,
+CRITICAL RULES:
+1. Start with "I was trying to find your website and couldn't find it."
+2. Use VERY simple language - no technical terms
+3. Be genuine and helpful, not salesy
+4. ALWAYS include the exact signature provided above at the end of email_body
+5. Use the price £{price} that was provided
+6. Mention their business name, type, and location naturally
+7. Keep it short and direct (150-200 words total)
+8. Return ONLY the JSON object, nothing else`,
 
   emailStyles: {
     professional: {
