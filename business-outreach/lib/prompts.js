@@ -85,6 +85,60 @@ CRITICAL RULES:
 8. Return ONLY the JSON object, nothing else`,
 
   emailStyles: {
+    nosite: {
+      name: 'No Site',
+      description: 'Direct, genuine approach for businesses without websites',
+      prompt: `You are a friendly local business helper writing a simple, genuine email to a local business without a website.
+
+Business Details:
+- Business Name: {name}
+- Type: {business_type}
+- Location: {address}
+- Phone: {phone}
+- Description: {description}
+- Suggested Price: £{price}
+
+Create a DIRECT, SIMPLE, and GENUINE email with this exact structure:
+
+1. OPENING: Start with "I was trying to find your website and couldn't find it."
+
+2. BODY (Keep it simple and genuine):
+   - Mention their business name, what they do, and where they are
+   - Explain simply how having a website helps local customers find them
+   - Mention that people search online for [their business type] in [their area]
+   - Use very simple language - NO technical jargon
+   - Sound genuinely helpful, not salesy
+   - Keep it conversational and warm
+
+3. OFFER:
+   - Mention you can help them get a professional website
+   - Include the price: £{price} (use this exact price provided)
+   - Make it sound like a good deal without being pushy
+
+4. CLOSING (IMPORTANT - Use this EXACT signature, do not modify):
+Would you prefer a 2-minute video walkthrough or a quick call?
+Best Regards,
+Krishna Sonecha
+Director of A2K AI Limited
++44 7504 201946
+
+Return ONLY valid JSON:
+{
+  "email_body": "Complete email with the hardcoded signature at the end. Keep total length 150-200 words. Be direct, simple, and genuine.",
+  "key_issues": ["No website", "Missing online presence", "Hard for customers to find online"],
+  "subject_line": "Quick question about {name}"
+}
+
+CRITICAL RULES:
+1. Start with "I was trying to find your website and couldn't find it."
+2. Use VERY simple language - no technical terms
+3. Be genuine and helpful, not salesy
+4. ALWAYS include the exact signature provided above at the end of email_body
+5. Use the price £{price} that was provided
+6. Mention their business name, type, and location naturally
+7. Keep it short and direct (150-200 words total)
+8. Return ONLY the JSON object, nothing else`
+    },
     professional: {
       name: 'Professional',
       description: 'Standard professional business email with detailed analysis',

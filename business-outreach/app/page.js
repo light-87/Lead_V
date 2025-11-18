@@ -32,7 +32,7 @@ export default function Home() {
   const [editingBusiness, setEditingBusiness] = useState(null);
   const [businessEdits, setBusinessEdits] = useState({});
   const [businessNotes, setBusinessNotes] = useState({});
-  const [emailStyle, setEmailStyle] = useState('professional');
+  const [emailStyle, setEmailStyle] = useState('nosite');
   const [settings, setSettings] = useState(null);
   const [history, setHistory] = useState([]);
   const [leads, setLeads] = useState([]);
