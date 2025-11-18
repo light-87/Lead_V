@@ -39,6 +39,7 @@ export default function Home() {
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedBusinessIds, setSelectedBusinessIds] = useState([]);
   const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkSending, setBulkSending] = useState(false);
   const [generatedEmails, setGeneratedEmails] = useState([]);
   const [searchedCities, setSearchedCities] = useState([]);
 
@@ -361,13 +362,10 @@ export default function Home() {
   // Send email via Smartlead
   const sendViaSmartlead = async (business, emailData) => {
     try {
-      // Check if Smartlead is configured
-      if (!settings?.smartlead?.enabled) {
-        toast.error('Smartlead is not enabled. Please enable it in Settings.');
-        return;
-      }
+      // Use hardcoded campaign ID as fallback
+      const campaignId = settings?.smartlead?.campaignId || '2690291';
 
-      if (!settings?.smartlead?.campaignId) {
+      if (!campaignId) {
         toast.error('Campaign ID not configured. Please add it in Settings.');
         return;
       }
@@ -400,7 +398,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'send',
-          campaignId: settings.smartlead.campaignId,
+          campaignId: campaignId,
           lead: leadData,
           email: emailData
         })
@@ -414,7 +412,18 @@ export default function Home() {
         // Also mark as sent in Lead Tracker
         await markEmailSent(business, emailData);
       } else {
-        toast.error(data.error || 'Failed to send via Smartlead');
+        // Show detailed error message for 403 errors
+        if (res.status === 403) {
+          toast.error(data.message || data.error, {
+            duration: 8000,
+            icon: '⚠️',
+          });
+          if (data.solution) {
+            console.log('Solution:', data.solution);
+          }
+        } else {
+          toast.error(data.error || 'Failed to send via Smartlead');
+        }
         console.error('Smartlead error:', data);
       }
     } catch (error) {
@@ -554,6 +563,93 @@ export default function Home() {
     toast.dismiss(loadingToast);
     toast.success(`Generated ${emails.length} emails!`);
     setSelectedBusinessIds([]);
+  };
+
+  // Send all generated emails via Smartlead
+  const sendBulkEmails = async () => {
+    if (generatedEmails.length === 0) {
+      toast.error('No emails to send');
+      return;
+    }
+
+    // Check if Smartlead is configured
+    const campaignId = settings?.smartlead?.campaignId || '2690291';
+    if (!campaignId) {
+      toast.error('Campaign ID not configured. Please add it in Settings.');
+      return;
+    }
+
+    setBulkSending(true);
+    let successCount = 0;
+    let failureCount = 0;
+
+    const loadingToast = toast.loading(`Sending ${generatedEmails.length} emails via Smartlead...`);
+
+    for (let i = 0; i < generatedEmails.length; i++) {
+      const { business, email } = generatedEmails[i];
+
+      try {
+        if (!business.email) {
+          console.warn(`Skipping ${business.name} - no email address`);
+          failureCount++;
+          continue;
+        }
+
+        // Prepare lead data
+        const leadData = {
+          first_name: business.name?.split(' ')[0] || 'There',
+          last_name: business.name?.split(' ').slice(1).join(' ') || '',
+          name: business.name,
+          email: business.email,
+          company_name: business.name,
+          website: business.website || '',
+          location: business.address || '',
+          address: business.address || '',
+          phone: business.phone || '',
+          business_type: business.business_type || '',
+          id: business.id
+        };
+
+        // Send to Smartlead
+        const res = await fetch('/api/smartlead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'send',
+            campaignId: campaignId,
+            lead: leadData,
+            email: email
+          })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          successCount++;
+          // Mark as sent in Lead Tracker
+          await markEmailSent(business, email);
+          toast.loading(`Sent ${successCount}/${generatedEmails.length}...`, { id: loadingToast });
+        } else {
+          failureCount++;
+          console.error(`Failed to send to ${business.name}:`, data.error);
+        }
+      } catch (error) {
+        failureCount++;
+        console.error(`Error sending to ${business.name}:`, error);
+      }
+    }
+
+    setBulkSending(false);
+    toast.dismiss(loadingToast);
+
+    if (successCount > 0 && failureCount === 0) {
+      toast.success(`Successfully sent all ${successCount} emails via Smartlead!`);
+      setGeneratedEmails([]); // Clear sent emails
+    } else if (successCount > 0) {
+      toast.success(`Sent ${successCount} emails. ${failureCount} failed.`);
+    } else {
+      toast.error(`Failed to send emails. Please check console for details.`);
+    }
   };
 
   return (
@@ -865,16 +961,14 @@ export default function Home() {
                       >
                         Copy Email
                       </Button>
-                      {settings?.smartlead?.enabled && (
-                        <Button
-                          onClick={() => sendViaSmartlead(selectedBusiness, email)}
-                          disabled={loading}
-                          className="flex-1 bg-green-600 hover:bg-green-700"
-                        >
-                          <Send className="w-4 h-4 mr-2" />
-                          {loading ? 'Sending...' : 'Send via Smartlead'}
-                        </Button>
-                      )}
+                      <Button
+                        onClick={() => sendViaSmartlead(selectedBusiness, email)}
+                        disabled={loading}
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                      >
+                        <Send className="w-4 h-4 mr-2" />
+                        {loading ? 'Sending...' : 'Send via Smartlead'}
+                      </Button>
                       <Button
                         onClick={() => markEmailSent(selectedBusiness, email)}
                         className="flex-1 bg-claude-orange hover:bg-claude-orange-dark"
@@ -916,17 +1010,15 @@ export default function Home() {
                             >
                               Copy
                             </Button>
-                            {settings?.smartlead?.enabled && (
-                              <Button
-                                size="sm"
-                                onClick={() => sendViaSmartlead(business, email)}
-                                disabled={loading}
-                                className="bg-green-600 hover:bg-green-700"
-                              >
-                                <Send className="w-4 h-4 mr-1" />
-                                Send
-                              </Button>
-                            )}
+                            <Button
+                              size="sm"
+                              onClick={() => sendViaSmartlead(business, email)}
+                              disabled={loading}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              <Send className="w-4 h-4 mr-1" />
+                              Send
+                            </Button>
                             <Button
                               size="sm"
                               onClick={() => markEmailSent(business, email)}
@@ -950,13 +1042,21 @@ export default function Home() {
                     ))}
                   </div>
 
-                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded">
-                    <p className="text-sm text-blue-800 mb-2">
-                      <strong>Ready to send?</strong> Smart Leads AI integration coming soon for bulk email sending.
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded">
+                    <p className="text-sm text-green-800 mb-2">
+                      <strong>Ready to send?</strong> Send all {generatedEmails.length} emails via Smartlead.
                     </p>
-                    <Button disabled variant="outline" size="sm">
-                      <Send className="w-4 h-4 mr-2" />
-                      Send All via Smart Leads AI (Coming Soon)
+                    <Button
+                      onClick={sendBulkEmails}
+                      disabled={bulkSending}
+                      className="bg-green-600 hover:bg-green-700"
+                      size="sm"
+                    >
+                      {bulkSending ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>
+                      ) : (
+                        <><Send className="w-4 h-4 mr-2" />Send All via Smartlead ({generatedEmails.length})</>
+                      )}
                     </Button>
                   </div>
                 </Card>
@@ -1446,7 +1546,29 @@ function SettingsTab({ settings, onSaveSettings }) {
           console.log('Available campaigns:', data.campaigns);
         }
       } else {
-        toast.error(data.error || 'Failed to connect to Smartlead');
+        // Show detailed error message for 403 errors
+        if (res.status === 403) {
+          toast.error(data.message || data.error, {
+            duration: 8000,
+            icon: '⚠️',
+          });
+          if (data.solution) {
+            console.log('Solution:', data.solution);
+            setTimeout(() => {
+              toast(data.solution, {
+                duration: 10000,
+                icon: '💡',
+                style: {
+                  background: '#fff3cd',
+                  color: '#856404',
+                  border: '1px solid #ffeaa7',
+                }
+              });
+            }, 500);
+          }
+        } else {
+          toast.error(data.error || 'Failed to connect to Smartlead');
+        }
         console.error('Connection error:', data);
       }
     } catch (error) {
@@ -1519,12 +1641,35 @@ function SettingsTab({ settings, onSaveSettings }) {
         <h3 className="text-lg font-serif mb-4">Smartlead Integration</h3>
         <p className="text-sm text-claude-gray mb-4">Configure Smartlead for automated email sending</p>
 
+        {/* Plan Requirements Banner */}
+        <div className="mb-4 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-blue-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h4 className="text-sm font-medium text-blue-800">PRO Plan Required</h4>
+              <div className="mt-2 text-sm text-blue-700">
+                <p className="mb-2">Smartlead API access requires a PRO plan subscription.</p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>Go to Smartlead → Settings → Activate API</li>
+                  <li>If "Activate API" is not available, upgrade to PRO plan</li>
+                  <li>Your API key will be provided after activation</li>
+                  <li>Add the API key to your .env.local file as SMARTLEAD_API_KEY</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-2">Campaign ID</label>
             <input
               type="text"
-              value={editedSettings.smartlead?.campaignId || ''}
+              value={editedSettings.smartlead?.campaignId || '2690291'}
               onChange={(e) => {
                 setEditedSettings({
                   ...editedSettings,
@@ -1534,16 +1679,16 @@ function SettingsTab({ settings, onSaveSettings }) {
                   }
                 });
               }}
-              placeholder="Enter your Smartlead Campaign ID"
+              placeholder="2690291"
               className="w-full px-3 py-2 border border-claude-border rounded-md"
             />
-            <p className="text-xs text-claude-gray mt-1">Get this from your Smartlead campaign dashboard</p>
+            <p className="text-xs text-green-600 mt-1">✅ Pre-configured with Campaign ID: 2690291</p>
           </div>
 
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
-              checked={editedSettings.smartlead?.enabled || false}
+              checked={editedSettings.smartlead?.enabled ?? true}
               onChange={(e) => {
                 setEditedSettings({
                   ...editedSettings,
@@ -1555,7 +1700,7 @@ function SettingsTab({ settings, onSaveSettings }) {
               }}
               className="rounded border-claude-border"
             />
-            <label className="text-sm">Enable Smartlead integration</label>
+            <label className="text-sm">Enable Smartlead integration (Enabled by default)</label>
           </div>
 
           <div className="flex gap-2">

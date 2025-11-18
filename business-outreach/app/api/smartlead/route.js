@@ -31,6 +31,21 @@ export async function POST(request) {
 
         if (!response.ok) {
           const errorText = await response.text();
+
+          // Check if it's a 403 error (likely plan limitation)
+          if (response.status === 403) {
+            return NextResponse.json(
+              {
+                error: 'API Access Denied - PRO Plan Required',
+                message: 'Smartlead API requires a PRO plan for API access. Your current Basic plan does not have API access enabled.',
+                solution: 'To use the API:\n1. Go to Smartlead Settings → Activate API\n2. Upgrade to a PRO plan if API is not available\n3. Your API key will be provided after activation',
+                status: response.status,
+                details: errorText
+              },
+              { status: 403 }
+            );
+          }
+
           return NextResponse.json(
             {
               error: 'Failed to connect to Smartlead API',
@@ -85,6 +100,8 @@ export async function POST(request) {
             custom_fields: {
               business_type: lead.business_type || '',
               address: lead.address || '',
+              ...(email?.subject_line && { email_subject: email.subject_line }),
+              ...(email?.email_body && { email_body: email.email_body }),
               ...(email?.key_issues && { key_issues: email.key_issues.join(', ') }),
             },
           },
@@ -110,6 +127,21 @@ export async function POST(request) {
 
         if (!response.ok) {
           const errorText = await response.text();
+
+          // Check if it's a 403 error (likely plan limitation)
+          if (response.status === 403) {
+            return NextResponse.json(
+              {
+                error: 'API Access Denied - PRO Plan Required',
+                message: 'Cannot send email. Smartlead API requires a PRO plan for API access.',
+                solution: 'Please upgrade your Smartlead plan to PRO to use API features.',
+                status: response.status,
+                details: errorText
+              },
+              { status: 403 }
+            );
+          }
+
           return NextResponse.json(
             {
               error: 'Failed to add lead to Smartlead campaign',
