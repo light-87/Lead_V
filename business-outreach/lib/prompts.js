@@ -11,6 +11,16 @@ CRITICAL REQUIREMENT: Find businesses that DO NOT have a website. These should b
 
 Search online for each business and confirm they DO NOT have a proper website. If they have a website, SKIP them and find another business.
 
+IMPORTANT: You MUST find an email address for each business. Look for emails in:
+- Google My Business listings
+- Facebook business pages
+- Yelp listings
+- Yellow Pages / Thomson Local
+- Business directories
+- Contact information in listings
+
+If you cannot find an email address for a business, SKIP that business and find one that HAS an email address.
+
 Return ONLY a valid JSON object (no markdown, no extra text):
 {
   "businesses": [
@@ -19,7 +29,7 @@ Return ONLY a valid JSON object (no markdown, no extra text):
       "name": "Business Name",
       "address": "Full address with postcode, UK",
       "phone": "+44XXXXXXXXXX",
-      "email": "contact@example.com or empty string if not found",
+      "email": "contact@example.com (REQUIRED - must have valid email)",
       "description": "Brief 1-line description of what they do"
     }
   ]
@@ -28,6 +38,7 @@ Return ONLY a valid JSON object (no markdown, no extra text):
 REQUIREMENTS:
 - Return ONLY the JSON object
 - Each business MUST NOT have a website
+- Each business MUST have a valid email address (REQUIRED)
 - Phone numbers MUST include +44 country code
 - Return EXACTLY {count} businesses total
 - NO chains or franchises

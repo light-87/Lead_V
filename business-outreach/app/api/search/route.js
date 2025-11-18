@@ -255,8 +255,21 @@ export async function POST(req) {
 
           const filteredByAI = businessesWithoutDirectWebsite.length - verifiedBusinesses.length;
 
-          // Add metadata to verified businesses
-          const withMetadata = verifiedBusinesses.map(b => ({
+          // Filter out businesses without valid email addresses
+          const isValidEmail = (email) => {
+            if (!email || typeof email !== 'string') return false;
+            const trimmed = email.trim();
+            if (trimmed === '' || trimmed === 'empty string' || trimmed === 'N/A' || trimmed === 'n/a') return false;
+            // Basic email format validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(trimmed);
+          };
+
+          const businessesWithEmail = verifiedBusinesses.filter(b => isValidEmail(b.email));
+          const filteredByNoEmail = verifiedBusinesses.length - businessesWithEmail.length;
+
+          // Add metadata to verified businesses with email
+          const withMetadata = businessesWithEmail.map(b => ({
             ...b,
             id: crypto.randomUUID(),
             website: null,
@@ -266,13 +279,14 @@ export async function POST(req) {
           // Step 4: Complete
           controller.enqueue(sendProgress(encoder, {
             stage: 'complete',
-            message: `Verification complete! Found ${withMetadata.length} businesses without websites.`,
+            message: `Verification complete! Found ${withMetadata.length} businesses without websites (with valid emails).`,
             progress: 100,
             businesses: withMetadata,
             stats: {
               initial: businesses.length,
               filteredByUrlCheck,
               filteredByAI,
+              filteredByNoEmail,
               final: withMetadata.length
             }
           }));
