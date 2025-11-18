@@ -38,6 +38,10 @@ export async function GET() {
         settings: {
           prompts: DEFAULT_PROMPTS,
           emailStyle: 'professional',
+          smartlead: {
+            campaignId: '',
+            enabled: false
+          },
           emailStyles: {
             professional: {
               name: 'Professional',
