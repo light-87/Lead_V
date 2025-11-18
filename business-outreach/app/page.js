@@ -42,6 +42,7 @@ export default function Home() {
   const [bulkSending, setBulkSending] = useState(false);
   const [generatedEmails, setGeneratedEmails] = useState([]);
   const [searchedCities, setSearchedCities] = useState([]);
+  const [searchProgress, setSearchProgress] = useState(null);
 
   // Load settings on mount
   useEffect(() => {
@@ -222,9 +223,11 @@ export default function Home() {
     );
   }
 
-  // Search businesses
+  // Search businesses with streaming progress
   const searchBusinesses = async (excludeNames = []) => {
     setLoading(true);
+    setSearchProgress({ progress: 0, message: 'Starting search...', stage: 'init' });
+
     try {
       const searchId = `${city.toLowerCase()}-${Date.now()}`;
 
@@ -243,35 +246,83 @@ export default function Home() {
           excludeBusinesses: excludeText
         })
       });
-      const data = await res.json();
 
-      if (res.ok) {
-        const newBusinesses = excludeNames.length > 0
-          ? [...businesses, ...data.businesses]
-          : data.businesses;
+      if (!res.ok) {
+        throw new Error('Search request failed');
+      }
 
-        setBusinesses(newBusinesses);
+      // Read the streaming response
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-        // Save to blob storage
-        await fetch('/api/data', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            businesses: data.businesses,
-            city,
-            searchId
-          })
-        });
+      while (true) {
+        const { done, value } = await reader.read();
 
-        toast.success(`Found ${data.businesses.length} businesses!`);
-        loadHistory(); // Refresh history
-      } else {
-        toast.error(data.error || 'Search failed');
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+
+            // Update progress
+            setSearchProgress({
+              progress: data.progress || 0,
+              message: data.message,
+              stage: data.stage,
+              stats: data.stats
+            });
+
+            // Handle completion
+            if (data.stage === 'complete' && data.businesses) {
+              const newBusinesses = excludeNames.length > 0
+                ? [...businesses, ...data.businesses]
+                : data.businesses;
+
+              setBusinesses(newBusinesses);
+
+              // Save to blob storage
+              await fetch('/api/data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  businesses: data.businesses,
+                  city,
+                  searchId
+                })
+              });
+
+              toast.success(`Found ${data.businesses.length} verified businesses without websites!`);
+              if (data.stats) {
+                toast.success(
+                  `Filtered: ${data.stats.filteredByUrlCheck} (direct check) + ${data.stats.filteredByAI} (AI verify) = ${data.stats.initial - data.stats.final} total filtered`,
+                  { duration: 6000 }
+                );
+              }
+              loadHistory(); // Refresh history
+            }
+
+            // Handle error
+            if (data.error) {
+              toast.error(data.message || 'Search failed');
+            }
+          }
+        }
       }
     } catch (error) {
       toast.error('Search failed: ' + error.message);
+      setSearchProgress(null);
+    } finally {
+      setLoading(false);
+      // Clear progress after a delay
+      setTimeout(() => setSearchProgress(null), 3000);
     }
-    setLoading(false);
   };
 
   // Search more businesses (ignoring existing)
@@ -753,6 +804,36 @@ export default function Home() {
                     <><Search className="w-4 h-4 mr-2" />Search Businesses</>
                   )}
                 </Button>
+
+                {/* Progress Bar */}
+                {searchProgress && (
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="mb-2">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-medium text-blue-900">
+                          {searchProgress.message}
+                        </span>
+                        <span className="text-xs text-blue-700">
+                          {Math.round(searchProgress.progress)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-blue-200 rounded-full h-2.5 overflow-hidden">
+                        <div
+                          className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                          style={{ width: `${searchProgress.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                    {searchProgress.stats && (
+                      <div className="mt-3 text-xs text-blue-800 space-y-1">
+                        <p>Initial results: <strong>{searchProgress.stats.initial}</strong></p>
+                        <p>Filtered by direct URL check: <strong>{searchProgress.stats.filteredByUrlCheck}</strong></p>
+                        <p>Filtered by AI verification: <strong>{searchProgress.stats.filteredByAI}</strong></p>
+                        <p className="text-green-700 font-semibold">Final verified: <strong>{searchProgress.stats.final}</strong></p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </Card>
 
