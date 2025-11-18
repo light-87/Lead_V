@@ -38,7 +38,7 @@ function determinePrice(businessType, address) {
 
 export async function POST(req) {
   try {
-    const { business } = await req.json();
+    const { business, customPrompt } = await req.json();
 
     if (!business) {
       return NextResponse.json({ error: 'Business data is required' }, { status: 400 });
@@ -53,7 +53,9 @@ export async function POST(req) {
       price: price
     };
 
-    const prompt = fillPrompt(DEFAULT_PROMPTS.emailGeneration, businessWithPrice);
+    // Use customPrompt if provided (for different email styles like nosite_part3), otherwise use default
+    const promptTemplate = customPrompt || DEFAULT_PROMPTS.emailGeneration;
+    const prompt = fillPrompt(promptTemplate, businessWithPrice);
 
     const res = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
