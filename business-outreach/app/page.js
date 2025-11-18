@@ -32,7 +32,7 @@ export default function Home() {
   const [editingBusiness, setEditingBusiness] = useState(null);
   const [businessEdits, setBusinessEdits] = useState({});
   const [businessNotes, setBusinessNotes] = useState({});
-  const [emailStyle, setEmailStyle] = useState('nosite');
+  const [selectedEmailStyles, setSelectedEmailStyles] = useState(['nosite', 'nosite_part2', 'nosite_part3']);
   const [settings, setSettings] = useState(null);
   const [history, setHistory] = useState([]);
   const [leads, setLeads] = useState([]);
@@ -79,8 +79,8 @@ export default function Home() {
       const data = await res.json();
       if (res.ok) {
         setSettings(data.settings);
-        if (data.settings.emailStyle) {
-          setEmailStyle(data.settings.emailStyle);
+        if (data.settings.selectedEmailStyles && Array.isArray(data.settings.selectedEmailStyles)) {
+          setSelectedEmailStyles(data.settings.selectedEmailStyles);
         }
       }
     } catch (error) {
@@ -333,12 +333,19 @@ export default function Home() {
 
   // Generate email with selected style and notes
   const generateEmail = async (business) => {
+    if (selectedEmailStyles.length === 0) {
+      toast.error('Please select at least one email style');
+      return;
+    }
+
     setSelectedBusiness(business);
     const loadingToast = toast.loading('Generating email...');
 
     try {
       const currentSettings = settings || { emailStyles: DEFAULT_PROMPTS.emailStyles };
-      const stylePrompt = currentSettings.emailStyles[emailStyle]?.prompt || DEFAULT_PROMPTS.emailStyles.professional.prompt;
+      // Randomly pick from selected styles
+      const randomStyle = selectedEmailStyles[Math.floor(Math.random() * selectedEmailStyles.length)];
+      const stylePrompt = currentSettings.emailStyles[randomStyle]?.prompt || DEFAULT_PROMPTS.emailStyles.nosite.prompt;
 
       // Add notes if available
       const notes = businessNotes[business.id] || '';
@@ -377,14 +384,19 @@ export default function Home() {
   };
 
   // Mark email as sent and add to leads
-  const markEmailSent = async (business, emailData) => {
+  const markEmailSent = async (business, emailData, usedEmailStyle = null) => {
     try {
+      // Use provided style or pick randomly from selected styles
+      const styleUsed = usedEmailStyle || (selectedEmailStyles.length > 0
+        ? selectedEmailStyles[Math.floor(Math.random() * selectedEmailStyles.length)]
+        : 'nosite');
+
       const leadData = {
         businessId: business.id,
         businessName: business.name,
         city: city,
         email: business.email,
-        emailStyle: emailStyle,
+        emailStyle: styleUsed,
         sentAt: new Date().toISOString(),
         status: 'sent',
         responded: false,
@@ -565,6 +577,11 @@ export default function Home() {
       return;
     }
 
+    if (selectedEmailStyles.length === 0) {
+      toast.error('Please select at least one email style');
+      return;
+    }
+
     setBulkGenerating(true);
     const emails = [];
     const selectedBusinesses = businesses.filter(b => selectedBusinessIds.includes(b.id));
@@ -576,17 +593,11 @@ export default function Home() {
       try {
         const currentSettings = settings || { emailStyles: DEFAULT_PROMPTS.emailStyles };
 
-        // If using nosite styles, distribute across all three parts
-        let currentStyle = emailStyle;
-        if (emailStyle === 'nosite' || emailStyle === 'nosite_part2' || emailStyle === 'nosite_part3') {
-          // Distribute emails evenly across all three nosite styles
-          // All businesses now get a chance at the free preview offer (part 3)
-          const nositeStyles = ['nosite', 'nosite_part2', 'nosite_part3'];
-          const styleIndex = i % nositeStyles.length;
-          currentStyle = nositeStyles[styleIndex];
-        }
+        // Distribute emails evenly across selected styles
+        const styleIndex = i % selectedEmailStyles.length;
+        const currentStyle = selectedEmailStyles[styleIndex];
 
-        const stylePrompt = currentSettings.emailStyles[currentStyle]?.prompt || DEFAULT_PROMPTS.emailStyles.professional.prompt;
+        const stylePrompt = currentSettings.emailStyles[currentStyle]?.prompt || DEFAULT_PROMPTS.emailStyles.nosite.prompt;
 
         const notes = businessNotes[business.id] || '';
         const additionalNotes = notes ? `\nADDITIONAL NOTES ABOUT THIS BUSINESS:\n${notes}` : '';
@@ -611,7 +622,8 @@ export default function Home() {
         if (res.ok) {
           emails.push({
             business,
-            email: data.email
+            email: data.email,
+            emailStyle: currentStyle
           });
           toast.loading(`Generated ${i + 1}/${selectedBusinesses.length}...`, { id: loadingToast });
         }
@@ -648,7 +660,7 @@ export default function Home() {
     const loadingToast = toast.loading(`Sending ${generatedEmails.length} emails via Smartlead...`);
 
     for (let i = 0; i < generatedEmails.length; i++) {
-      const { business, email } = generatedEmails[i];
+      const { business, email, emailStyle } = generatedEmails[i];
 
       try {
         if (!business.email) {
@@ -689,7 +701,7 @@ export default function Home() {
         if (res.ok) {
           successCount++;
           // Mark as sent in Lead Tracker
-          await markEmailSent(business, email);
+          await markEmailSent(business, email, emailStyle);
           toast.loading(`Sent ${successCount}/${generatedEmails.length}...`, { id: loadingToast });
         } else {
           failureCount++;
@@ -905,21 +917,35 @@ export default function Home() {
                 </div>
               </Card>
 
-              {/* Email Style Selector */}
+              {/* Email Style Selector - Multi-select */}
               <Card className="p-4">
-                <label className="block text-sm font-medium mb-2">Email Style</label>
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-                  {Object.entries(DEFAULT_PROMPTS.emailStyles).map(([key, style]) => (
-                    <Button
-                      key={key}
-                      variant={emailStyle === key ? 'default' : 'outline'}
-                      onClick={() => setEmailStyle(key)}
-                      size="sm"
-                      className={emailStyle === key ? 'bg-claude-orange hover:bg-claude-orange-dark' : ''}
-                    >
-                      {style.name}
-                    </Button>
-                  ))}
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium">Email Styles (Select Multiple)</label>
+                  <span className="text-xs text-claude-gray">
+                    {selectedEmailStyles.length} selected - {selectedEmailStyles.length > 0 ? `${(100 / selectedEmailStyles.length).toFixed(1)}% each` : '0%'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {Object.entries(DEFAULT_PROMPTS.emailStyles).map(([key, style]) => {
+                    const isSelected = selectedEmailStyles.includes(key);
+                    return (
+                      <Button
+                        key={key}
+                        variant={isSelected ? 'default' : 'outline'}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedEmailStyles(selectedEmailStyles.filter(s => s !== key));
+                          } else {
+                            setSelectedEmailStyles([...selectedEmailStyles, key]);
+                          }
+                        }}
+                        size="sm"
+                        className={isSelected ? 'bg-claude-orange hover:bg-claude-orange-dark' : ''}
+                      >
+                        {style.name}
+                      </Button>
+                    );
+                  })}
                 </div>
               </Card>
 
@@ -974,7 +1000,7 @@ export default function Home() {
                           className="w-full bg-claude-orange hover:bg-claude-orange-dark"
                           size="sm"
                         >
-                          <Mail className="w-3 h-3 mr-2" />Generate Email ({emailStyle})
+                          <Mail className="w-3 h-3 mr-2" />Generate Email ({selectedEmailStyles.length} style{selectedEmailStyles.length !== 1 ? 's' : ''})
                         </Button>
                       </div>
                     </Card>
