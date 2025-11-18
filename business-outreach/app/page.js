@@ -361,13 +361,10 @@ export default function Home() {
   // Send email via Smartlead
   const sendViaSmartlead = async (business, emailData) => {
     try {
-      // Check if Smartlead is configured
-      if (!settings?.smartlead?.enabled) {
-        toast.error('Smartlead is not enabled. Please enable it in Settings.');
-        return;
-      }
+      // Use hardcoded campaign ID as fallback
+      const campaignId = settings?.smartlead?.campaignId || '2690291';
 
-      if (!settings?.smartlead?.campaignId) {
+      if (!campaignId) {
         toast.error('Campaign ID not configured. Please add it in Settings.');
         return;
       }
@@ -400,7 +397,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'send',
-          campaignId: settings.smartlead.campaignId,
+          campaignId: campaignId,
           lead: leadData,
           email: emailData
         })
@@ -876,16 +873,14 @@ export default function Home() {
                       >
                         Copy Email
                       </Button>
-                      {settings?.smartlead?.enabled && (
-                        <Button
-                          onClick={() => sendViaSmartlead(selectedBusiness, email)}
-                          disabled={loading}
-                          className="flex-1 bg-green-600 hover:bg-green-700"
-                        >
-                          <Send className="w-4 h-4 mr-2" />
-                          {loading ? 'Sending...' : 'Send via Smartlead'}
-                        </Button>
-                      )}
+                      <Button
+                        onClick={() => sendViaSmartlead(selectedBusiness, email)}
+                        disabled={loading}
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                      >
+                        <Send className="w-4 h-4 mr-2" />
+                        {loading ? 'Sending...' : 'Send via Smartlead'}
+                      </Button>
                       <Button
                         onClick={() => markEmailSent(selectedBusiness, email)}
                         className="flex-1 bg-claude-orange hover:bg-claude-orange-dark"
@@ -927,17 +922,15 @@ export default function Home() {
                             >
                               Copy
                             </Button>
-                            {settings?.smartlead?.enabled && (
-                              <Button
-                                size="sm"
-                                onClick={() => sendViaSmartlead(business, email)}
-                                disabled={loading}
-                                className="bg-green-600 hover:bg-green-700"
-                              >
-                                <Send className="w-4 h-4 mr-1" />
-                                Send
-                              </Button>
-                            )}
+                            <Button
+                              size="sm"
+                              onClick={() => sendViaSmartlead(business, email)}
+                              disabled={loading}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              <Send className="w-4 h-4 mr-1" />
+                              Send
+                            </Button>
                             <Button
                               size="sm"
                               onClick={() => markEmailSent(business, email)}
@@ -1580,7 +1573,7 @@ function SettingsTab({ settings, onSaveSettings }) {
             <label className="block text-sm font-medium mb-2">Campaign ID</label>
             <input
               type="text"
-              value={editedSettings.smartlead?.campaignId || ''}
+              value={editedSettings.smartlead?.campaignId || '2690291'}
               onChange={(e) => {
                 setEditedSettings({
                   ...editedSettings,
@@ -1590,16 +1583,16 @@ function SettingsTab({ settings, onSaveSettings }) {
                   }
                 });
               }}
-              placeholder="Enter your Smartlead Campaign ID"
+              placeholder="2690291"
               className="w-full px-3 py-2 border border-claude-border rounded-md"
             />
-            <p className="text-xs text-claude-gray mt-1">Get this from your Smartlead campaign dashboard</p>
+            <p className="text-xs text-green-600 mt-1">✅ Pre-configured with Campaign ID: 2690291</p>
           </div>
 
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
-              checked={editedSettings.smartlead?.enabled || false}
+              checked={editedSettings.smartlead?.enabled ?? true}
               onChange={(e) => {
                 setEditedSettings({
                   ...editedSettings,
@@ -1611,7 +1604,7 @@ function SettingsTab({ settings, onSaveSettings }) {
               }}
               className="rounded border-claude-border"
             />
-            <label className="text-sm">Enable Smartlead integration</label>
+            <label className="text-sm">Enable Smartlead integration (Enabled by default)</label>
           </div>
 
           <div className="flex gap-2">
