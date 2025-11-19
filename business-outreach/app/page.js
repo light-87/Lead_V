@@ -792,7 +792,12 @@ export default function Home() {
                     min="20"
                     max="50"
                     value={count}
-                    onChange={(e) => setCount(parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      if (!isNaN(value)) {
+                        setCount(Math.min(50, Math.max(20, value)));
+                      }
+                    }}
                   />
                 </div>
 
