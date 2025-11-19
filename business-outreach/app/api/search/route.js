@@ -64,6 +64,49 @@ async function hasWebsiteDirectCheck(business) {
   return checks.some(exists => exists);
 }
 
+// Helper function to verify email with Anymailfinder API
+async function verifyEmailWithAnymailfinder(email) {
+  try {
+    const apiKey = process.env.ANYMAILFINDER_API_KEY;
+    if (!apiKey) {
+      console.error('ANYMAILFINDER_API_KEY not configured');
+      return { valid: true, verification_status: 'skipped' }; // Skip if no API key
+    }
+
+    const response = await fetch('https://api.anymailfinder.com/v5.1/verify-email', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: email
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Email verification failed for ${email}:`, errorText);
+      return { valid: true, verification_status: 'error' }; // On error, keep the email
+    }
+
+    const data = await response.json();
+
+    // Check verification result - valid emails have verification_status of 'valid'
+    // Invalid emails have 'invalid', risky ones have 'risky'
+    const isValid = data.verification_status === 'valid' || data.verification_status === 'accept_all';
+
+    return {
+      valid: isValid,
+      verification_status: data.verification_status || 'unknown',
+      email: data.email || email
+    };
+  } catch (error) {
+    console.error(`Email verification error for ${email}:`, error);
+    return { valid: true, verification_status: 'error' }; // On error, keep the email
+  }
+}
+
 // Helper function to verify via Perplexity AI
 async function verifyNoWebsiteWithAI(business) {
   try {
@@ -219,22 +262,65 @@ export async function POST(req) {
 
           controller.enqueue(sendProgress(encoder, {
             stage: 'url_check_complete',
-            message: `Direct URL check complete. Filtered out ${filteredByUrlCheck} businesses with websites. Verifying remaining ${businessesWithoutDirectWebsite.length}...`,
+            message: `Direct URL check complete. Filtered out ${filteredByUrlCheck} businesses with websites. Verifying emails...`,
             progress: 50,
             filtered: filteredByUrlCheck,
             remaining: businessesWithoutDirectWebsite.length
           }));
 
-          // Step 3: AI double-check for remaining businesses
+          // Step 3: Email verification with Anymailfinder
+          controller.enqueue(sendProgress(encoder, {
+            stage: 'email_verify',
+            message: 'Verifying email addresses...',
+            progress: 52
+          }));
+
+          const businessesWithValidEmails = [];
+          for (let i = 0; i < businessesWithoutDirectWebsite.length; i++) {
+            const business = businessesWithoutDirectWebsite[i];
+
+            // Skip if no email
+            if (!business.email || typeof business.email !== 'string' || business.email.trim() === '') {
+              continue;
+            }
+
+            // Verify email with Anymailfinder
+            const result = await verifyEmailWithAnymailfinder(business.email.trim());
+
+            if (result.valid) {
+              businessesWithValidEmails.push(business);
+            }
+
+            controller.enqueue(sendProgress(encoder, {
+              stage: 'email_verify',
+              message: `Verified ${i + 1}/${businessesWithoutDirectWebsite.length} emails...`,
+              progress: 52 + (18 * (i + 1) / businessesWithoutDirectWebsite.length),
+              checked: i + 1,
+              total: businessesWithoutDirectWebsite.length,
+              valid: businessesWithValidEmails.length
+            }));
+          }
+
+          const filteredByEmailVerify = businessesWithoutDirectWebsite.length - businessesWithValidEmails.length;
+
+          controller.enqueue(sendProgress(encoder, {
+            stage: 'email_verify_complete',
+            message: `Email verification complete. Filtered out ${filteredByEmailVerify} invalid emails. AI verifying remaining ${businessesWithValidEmails.length}...`,
+            progress: 70,
+            filtered: filteredByEmailVerify,
+            remaining: businessesWithValidEmails.length
+          }));
+
+          // Step 4: AI double-check for remaining businesses
           controller.enqueue(sendProgress(encoder, {
             stage: 'ai_verify',
             message: 'Double-checking with AI verification...',
-            progress: 55
+            progress: 72
           }));
 
           const verifiedBusinesses = [];
-          for (let i = 0; i < businessesWithoutDirectWebsite.length; i++) {
-            const business = businessesWithoutDirectWebsite[i];
+          for (let i = 0; i < businessesWithValidEmails.length; i++) {
+            const business = businessesWithValidEmails[i];
 
             // Use AI to verify
             const hasWebsite = await verifyNoWebsiteWithAI(business);
@@ -245,15 +331,15 @@ export async function POST(req) {
 
             controller.enqueue(sendProgress(encoder, {
               stage: 'ai_verify',
-              message: `AI verified ${i + 1}/${businessesWithoutDirectWebsite.length} businesses...`,
-              progress: 55 + (35 * (i + 1) / businessesWithoutDirectWebsite.length),
+              message: `AI verified ${i + 1}/${businessesWithValidEmails.length} businesses...`,
+              progress: 72 + (23 * (i + 1) / businessesWithValidEmails.length),
               checked: i + 1,
-              total: businessesWithoutDirectWebsite.length,
+              total: businessesWithValidEmails.length,
               verified: verifiedBusinesses.length
             }));
           }
 
-          const filteredByAI = businessesWithoutDirectWebsite.length - verifiedBusinesses.length;
+          const filteredByAI = businessesWithValidEmails.length - verifiedBusinesses.length;
 
           // Filter out businesses without valid email addresses
           const isValidEmail = (email) => {
@@ -285,6 +371,7 @@ export async function POST(req) {
             stats: {
               initial: businesses.length,
               filteredByUrlCheck,
+              filteredByEmailVerify,
               filteredByAI,
               filteredByNoEmail,
               final: withMetadata.length
